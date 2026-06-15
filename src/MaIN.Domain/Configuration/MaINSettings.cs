@@ -6,7 +6,6 @@ public class MaINSettings
 {
     public BackendType BackendType { get; set; } = BackendType.Self;
     public string? ModelsPath { get; set; }
-    public string? ImageGenUrl { get; set; }
     public string? OpenAiKey { get; set; }
     public string? GeminiKey { get; set; }
     public string? DeepSeekKey { get; set; }

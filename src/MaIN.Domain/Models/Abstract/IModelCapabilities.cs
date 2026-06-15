@@ -50,3 +50,51 @@ public interface ITTSModel;
 /// Interface for models that generate images from text prompts.
 /// </summary>
 public interface IImageGenerationModel;
+
+/// <summary>
+/// Diffusion model architecture, used to pick sensible generation defaults and required text-encoder/VAE assets.
+/// </summary>
+public enum DiffusionArchitecture
+{
+    SD1,
+    SDXL,
+    SD3,
+    Flux,
+    QwenImage
+}
+
+/// <summary>
+/// Interface for local GGUF diffusion models that generate images in-process via stable-diffusion.cpp.
+/// </summary>
+public interface ILocalDiffusionModel : IImageGenerationModel
+{
+    /// <summary> Diffusion model architecture (affects defaults and required encoder/VAE assets). </summary>
+    DiffusionArchitecture Architecture { get; }
+
+    /// <summary> Default output image width in pixels. </summary>
+    int Width { get; }
+
+    /// <summary> Default output image height in pixels. </summary>
+    int Height { get; }
+
+    /// <summary> Default number of sampling steps. </summary>
+    int Steps { get; }
+
+    /// <summary> Default classifier-free guidance scale. </summary>
+    float CfgScale { get; }
+
+    /// <summary> Optional separate VAE file. Null if the VAE is embedded in the main model file. </summary>
+    ModelAsset? Vae { get; }
+
+    /// <summary> Optional CLIP-L text encoder file. </summary>
+    ModelAsset? ClipL { get; }
+
+    /// <summary> Optional CLIP-G text encoder file (SDXL/SD3). </summary>
+    ModelAsset? ClipG { get; }
+
+    /// <summary> Optional T5-XXL text encoder file (SD3/FLUX). </summary>
+    ModelAsset? T5Xxl { get; }
+
+    /// <summary> Optional Qwen2.5-VL text encoder file (Qwen-Image). </summary>
+    ModelAsset? Qwen2VL { get; }
+}

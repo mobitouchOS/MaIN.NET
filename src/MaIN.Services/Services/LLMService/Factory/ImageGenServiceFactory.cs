@@ -23,8 +23,7 @@ public class ImageGenServiceFactory(IServiceProvider serviceProvider) : IImageGe
             BackendType.Vertex => new VertexImageGenService(serviceProvider.GetRequiredService<IHttpClientFactory>(),
                 serviceProvider.GetRequiredService<MaINSettings>()),
             BackendType.Ollama => null,
-            BackendType.Self => new ImageGenService(serviceProvider.GetRequiredService<IHttpClientFactory>(),
-                serviceProvider.GetRequiredService<MaINSettings>()),
+            BackendType.Self => new LocalImageGenService(serviceProvider.GetRequiredService<MaINSettings>()),
             _ => throw new NotSupportedException("Not support image generation."),
         };
     }

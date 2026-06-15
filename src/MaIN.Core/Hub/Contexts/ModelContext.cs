@@ -142,10 +142,23 @@ public sealed class ModelContext : IModelContext
 
     private async Task DownloadModelAsync(LocalModel localModel, IProgress<DownloadProgress>? progress, CancellationToken cancellationToken)
     {
-        if (localModel.DownloadUrl is null) throw new DownloadUrlNullOrEmptyException();
+        foreach (var asset in localModel.RequiredAssets)
+        {
+            var assetPath = localModel.GetAssetPath(asset, _defaultModelsPath);
+            if (File.Exists(assetPath))
+            {
+                continue;
+            }
 
-        var filePath = GetModelFilePath(localModel);
-        Console.WriteLine($"Starting download of {localModel.FileName}...");
+            if (asset.DownloadUrl is null) throw new DownloadUrlNullOrEmptyException();
+
+            await DownloadAssetAsync(asset.DownloadUrl, assetPath, asset.FileName, progress, cancellationToken);
+        }
+    }
+
+    private async Task DownloadAssetAsync(Uri downloadUrl, string filePath, string fileName, IProgress<DownloadProgress>? progress, CancellationToken cancellationToken)
+    {
+        Console.WriteLine($"Starting download of {fileName}...");
 
         for (int attempt = 0; attempt <= MaxRetryAttempts; attempt++)
         {
@@ -158,7 +171,7 @@ public sealed class ModelContext : IModelContext
 
             try
             {
-                await TryDownloadWithResumeAsync(localModel.DownloadUrl, filePath, localModel.FileName, progress, cancellationToken);
+                await TryDownloadWithResumeAsync(downloadUrl, filePath, fileName, progress, cancellationToken);
                 return;
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -173,7 +186,7 @@ public sealed class ModelContext : IModelContext
         }
 
         if (File.Exists(filePath)) File.Delete(filePath);
-        throw new IOException($"Download of {localModel.FileName} failed after {MaxRetryAttempts} retries.");
+        throw new IOException($"Download of {fileName} failed after {MaxRetryAttempts} retries.");
     }
 
     private async Task TryDownloadWithResumeAsync(Uri url, string filePath, string fileName, IProgress<DownloadProgress>? progress, CancellationToken cancellationToken)

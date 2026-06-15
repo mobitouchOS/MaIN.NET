@@ -39,6 +39,9 @@ public abstract record AIModel(
     public bool HasImageGeneration => this is IImageGenerationModel;
 }
 
+/// <summary> A file required on disk for a local model, optionally downloadable from a URL. </summary>
+public record ModelAsset(string FileName, Uri? DownloadUrl = null);
+
 /// <summary> Base class for local models. </summary>
 public abstract record LocalModel(
     string Id,
@@ -59,11 +62,14 @@ public abstract record LocalModel(
     /// <summary> Gets or sets the custom file system path (excluding file name eg. your\path\). If not null will be prioritized over the default base path. </summary>
     public string? CustomPath { get; } = CustomPath;
 
+    /// <summary> Files required on disk for this model. Defaults to just the main model file; multi-asset models (eg. diffusion models with separate VAE/text-encoder files) override this. </summary>
+    public virtual IEnumerable<ModelAsset> RequiredAssets => [new ModelAsset(FileName, DownloadUrl)];
+
     public bool IsDownloaded(string? basePath)
     {
         try
         {
-            return File.Exists(GetFullPath(basePath));
+            return RequiredAssets.All(asset => File.Exists(GetAssetPath(asset, basePath)));
         }
         catch (ModelPathNullOrEmptyException)
         {
@@ -79,11 +85,20 @@ public abstract record LocalModel(
     /// <param name="basePath">The base path to combine with the file name. If null or empty, the method uses the custom path.</param>
     /// <returns>A string representing the full file path formed by combining the base path and the file name.</returns>
     /// <exception cref="ModelPathNullOrEmptyException">Thrown if both CustomPath and basePath are null or empty.</exception>
-    public string GetFullPath(string? basePath = null)
+    public string GetFullPath(string? basePath = null) => GetAssetPath(new ModelAsset(FileName, DownloadUrl), basePath);
+
+    /// <summary>
+    /// Combines the specified base path with an asset's file name to generate its full file path.
+    /// </summary>
+    /// <param name="asset">The asset whose file path should be resolved.</param>
+    /// <param name="basePath">The base path to combine with the asset's file name. If null or empty, the method uses the custom path.</param>
+    /// <returns>A string representing the full file path formed by combining the base path and the asset's file name.</returns>
+    /// <exception cref="ModelPathNullOrEmptyException">Thrown if both CustomPath and basePath are null or empty.</exception>
+    public string GetAssetPath(ModelAsset asset, string? basePath = null)
     {
         return string.IsNullOrEmpty(CustomPath) && string.IsNullOrEmpty(basePath)
             ? throw new ModelPathNullOrEmptyException()
-            : Path.Combine((CustomPath ?? basePath)!, FileName);
+            : Path.Combine((CustomPath ?? basePath)!, asset.FileName);
     }
 }
 
@@ -235,6 +250,64 @@ public record GenericLocalVisionReasoningModel(
     public Func<string, ThinkingState, LLMTokenValue> ReasonFunction { get; } = ReasonFunction;
     public string? AdditionalPrompt { get; } = AdditionalPrompt;
 }
+
+/// <summary> Base class for local GGUF diffusion (image generation) models. </summary>
+public abstract record LocalDiffusionModel(
+    string Id,
+    string FileName,
+    Uri? DownloadUrl,
+    string? Name,
+    DiffusionArchitecture Architecture,
+    int Width = 1024,
+    int Height = 1024,
+    int Steps = 20,
+    float CfgScale = 7.0f,
+    ModelAsset? Vae = null,
+    ModelAsset? ClipL = null,
+    ModelAsset? ClipG = null,
+    ModelAsset? T5Xxl = null,
+    ModelAsset? Qwen2VL = null,
+    uint MaxContextWindowSize = ModelDefaults.DefaultMaxContextWindow,
+    string? Description = null,
+    string? CustomPath = null
+) : LocalModel(Id, FileName, DownloadUrl, Name, MaxContextWindowSize, Description, null, CustomPath), ILocalDiffusionModel
+{
+    public DiffusionArchitecture Architecture { get; } = Architecture;
+    public int Width { get; } = Width;
+    public int Height { get; } = Height;
+    public int Steps { get; } = Steps;
+    public float CfgScale { get; } = CfgScale;
+    public ModelAsset? Vae { get; } = Vae;
+    public ModelAsset? ClipL { get; } = ClipL;
+    public ModelAsset? ClipG { get; } = ClipG;
+    public ModelAsset? T5Xxl { get; } = T5Xxl;
+    public ModelAsset? Qwen2VL { get; } = Qwen2VL;
+
+    /// <summary> The main model file plus any configured VAE/text-encoder assets. </summary>
+    public override IEnumerable<ModelAsset> RequiredAssets =>
+        new ModelAsset?[] { new ModelAsset(FileName, DownloadUrl), Vae, ClipL, ClipG, T5Xxl, Qwen2VL }
+            .OfType<ModelAsset>();
+}
+
+/// <summary> Generic class for runtime defined local diffusion (image generation) models. </summary>
+public record GenericLocalImageGenerationModel(
+    string FileName,
+    DiffusionArchitecture Architecture,
+    string? Name = null,
+    string? Id = null,
+    Uri? DownloadUrl = null,
+    int Width = 1024,
+    int Height = 1024,
+    int Steps = 20,
+    float CfgScale = 7.0f,
+    ModelAsset? Vae = null,
+    ModelAsset? ClipL = null,
+    ModelAsset? ClipG = null,
+    ModelAsset? T5Xxl = null,
+    ModelAsset? Qwen2VL = null,
+    string? CustomPath = null,
+    string? Description = null
+) : LocalDiffusionModel(Id ?? FileName, FileName, DownloadUrl, Name ?? FileName, Architecture, Width, Height, Steps, CfgScale, Vae, ClipL, ClipG, T5Xxl, Qwen2VL, ModelDefaults.DefaultMaxContextWindow, Description, CustomPath);
 
 public static class ModelDefaults
 {

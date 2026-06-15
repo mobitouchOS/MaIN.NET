@@ -4,6 +4,7 @@ using MaIN.Core.Hub;
 using MaIN.Domain.Entities;
 using MaIN.Domain.Models;
 using MaIN.Domain.Models.Abstract;
+using MaIN.Domain.Models.Concrete;
 
 namespace MaIN.Core.E2ETests;
 
@@ -127,21 +128,12 @@ public class ChatTests : IntegrationTestBase
     [Fact(Skip = "Require powerful GPU")]
     public async Task Should_GenerateImage_BasedOnPrompt()
     {
-        Assert.True(NetworkHelper.PingHost("127.0.0.1", 5003, 5), "Please make sure ImageGen service is running on port 5003");
+        ModelRegistry.RegisterOrReplace(new StableDiffusion1_5());
 
-        const string extension = "png";
-
-        var fluxModel = new GenericLocalModel("FLUX.1_Shnell");
-        ModelRegistry.RegisterOrReplace(fluxModel);
         var result = await AIHub.Chat()
-            .WithModel(fluxModel.Id)
+            .WithModel(Models.Local.StableDiffusion1_5)
             .WithMessage("Generate cat in Rome. Sightseeing, colloseum, ancient builidngs, Italy.")
             .CompleteAsync();
-
-        if (string.IsNullOrWhiteSpace(extension) || extension.Contains("."))
-        {
-            throw new ArgumentException("Invalid file extension");
-        }
 
         Assert.True(result.Done);
         Assert.NotNull(result.Message.Image);

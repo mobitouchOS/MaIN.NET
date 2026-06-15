@@ -17,15 +17,13 @@ $itemsToCopy = @{
         "mcli.ps1",
         "start.ps1",
         "start-api.ps1",
-        "start-image-gen.ps1",
         "download-models.ps1",
         "docker-compose.yml",
         "models_map.txt",
         ".models"
     )
     Directories = @(
-        "server",
-        "ImageGen"
+        "server"
     )
 }
 # Copy files

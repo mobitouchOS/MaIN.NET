@@ -79,6 +79,10 @@ EXPOSE 5555
 
 COPY --from=publish /app/out .
 
+RUN find /app/runtimes/linux-x64/native -maxdepth 2 -mindepth 1 -type d \
+    | tee /etc/ld.so.conf.d/llamasharp.conf \
+    && ldconfig
+
 ENTRYPOINT ["dotnet", "MaIN.InferPage.dll"]
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime-ollama
