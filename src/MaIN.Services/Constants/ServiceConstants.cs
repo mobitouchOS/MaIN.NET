@@ -4,7 +4,6 @@ public static class ServiceConstants
 {
     public static class HttpClients
     {
-        public const string ImageGenClient = "ImageGenClient";
         public const string OpenAiClient = "OpenAiClient";
         public const string GeminiClient = "GeminiClient";
         public const string DeepSeekClient = "DeepSeekClient";
@@ -75,7 +74,6 @@ public static class ServiceConstants
     public static class Defaults
     {
         public const string ImageSize = "1024x1024";
-        public const int HttpImageModelTimeoutInMinutes = 5;
     }
 
     public static class Notifications

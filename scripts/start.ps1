@@ -8,7 +8,6 @@ $hard = $false
 $models = @()
 $noApi = $false
 $apiOnly = $false
-$noImageGen = $false
 $noModels = $false
 
 # Parse command-line arguments
@@ -32,9 +31,6 @@ foreach ($arg in $arguments) {
     elseif ($arg -eq '--api-only') {
         $apiOnly = $true
     }
-    elseif ($arg -eq '--no-image-gen') {
-        $noImageGen = $true
-    }
     elseif ($arg -eq '--no-models') {
         $noModels = $true
     }
@@ -49,7 +45,6 @@ Write-Host "Hard: $hard"
 Write-Host "Models: $($models -join ', ')"
 Write-Host "No API: $noApi"
 Write-Host "API Only: $apiOnly"
-Write-Host "No Image Gen: $noImageGen"
 Write-Host "No Models: $noModels"
 
 # Run setup tasks unless --api-only is provided
@@ -62,12 +57,6 @@ if (-not $apiOnly) {
         } else {
             & "$PSScriptRoot\download-models.ps1"
         }
-    }
-
-    # Handle Image Generation API unless --no-image-gen is specified
-    if (-not $noImageGen) {
-        Write-Host "Starting Image Generation API as a background job..."
-        Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSScriptRoot\start-image-gen.ps1`"" -NoNewWindow
     }
 }
 

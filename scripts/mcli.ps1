@@ -34,9 +34,8 @@ Usage:
     mcli <command> [options]
 
 Commands:
-    start-demo       Start all services (API, image generation, and download models)
+    start-demo       Start all services (API and download models)
     api         Start only the API service
-    image-gen   Start only the image generation service
     model       Download and manage models
     help        Show this help message
     uninstall   Uninstall mcli
@@ -45,7 +44,6 @@ Options for 'start':
     --hard           Hard cleanup of containers
     --no-api         Skip starting the API
     --no-models      Skip model downloads
-    --no-image-gen   Skip image generation
     --models=<list>  Specify comma-separated list of models to download
 
 Options for 'api':
@@ -59,7 +57,6 @@ Options for 'model':
 
 Examples:
     mcli start-demo
-    mcli start-demo --no-image-gen
     mcli api --hard
     mcli model download gemma2-2b-maIN
     mcli help
@@ -81,12 +78,10 @@ Options:
     --hard           Perform hard cleanup of containers before starting
     --no-api         Skip starting the API
     --no-models      Skip model downloads
-    --no-image-gen   Skip image generation
     --models=<list>  Specify comma-separated list of models to download
 
 Examples:
     mcli start-demo
-    mcli start-demo --no-image-gen
     mcli start-demo --models=gemma2-2b-maIN
 "@
         }
@@ -103,17 +98,6 @@ Options:
 Examples:
     mcli api
     mcli api --hard
-"@
-        }
-        "image-gen" {
-            Write-Host @"
-mcli image-gen - Start the image generation service
-
-Usage:
-    mcli image-gen
-
-Examples:
-    mcli image-gen
 "@
         }
         "model" {
@@ -149,9 +133,6 @@ switch ($command) {
     }
     "api" {
         & "$PSScriptRoot\start-api.ps1" $arguments
-    }
-    "image-gen" {
-        & "$PSScriptRoot\start-image-gen.ps1" $arguments
     }
     "model" {
         $subcommand = $arguments[0]

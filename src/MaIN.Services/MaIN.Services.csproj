@@ -18,6 +18,10 @@
       <PackageReference Include="llamasharp.backend.cpu" Version="0.27.0" />
       <PackageReference Include="LLamaSharp.Backend.Cuda12" Version="0.27.0" />
       <PackageReference Include="LLamaSharp.kernel-memory" Version="0.27.0" />
+      <PackageReference Include="StableDiffusion.NET" Version="7.0.0" />
+      <PackageReference Include="StableDiffusion.NET.Backend.Cpu" Version="7.0.0" />
+      <PackageReference Include="StableDiffusion.NET.Backend.Cuda" Version="7.0.0" />
+      <PackageReference Include="HPPH.SkiaSharp" Version="1.0.0" />
       <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.1" />
       <PackageReference Include="Microsoft.KernelMemory" Version="0.98.250508.3" />
       <PackageReference Include="Microsoft.SemanticKernel.Connectors.Google" Version="1.77.0-alpha" />

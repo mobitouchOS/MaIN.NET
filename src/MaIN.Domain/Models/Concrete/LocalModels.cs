@@ -296,13 +296,46 @@ public sealed record Olmo2_7b() : LocalModel(
 
 // ===== Image Generation =====
 
-public sealed record Flux1Shnell() : LocalModel(
+public sealed record StableDiffusion1_5() : LocalDiffusionModel(
+    Models.Local.StableDiffusion1_5,
+    "sd-v1-5-pruned-emaonly-Q8_0.gguf",
+    new Uri("https://huggingface.co/second-state/stable-diffusion-v1-5-GGUF/resolve/main/stable-diffusion-v1-5-pruned-emaonly-Q8_0.gguf?download=true"),
+    "Stable Diffusion 1.5",
+    DiffusionArchitecture.SD1,
+    Width: 512,
+    Height: 512,
+    Steps: 25,
+    CfgScale: 7.0f,
+    Description: "Small, fast local image generation model - good for CPUs and low-VRAM machines");
+
+public sealed record Flux1Shnell() : LocalDiffusionModel(
     Models.Local.Flux1Shnell,
-    "FLUX.1_Shnell",
-    null,
+    "flux1-schnell-Q4_0.gguf",
+    new Uri("https://huggingface.co/city96/FLUX.1-schnell-gguf/resolve/main/flux1-schnell-Q4_0.gguf?download=true"),
     "FLUX.1 Schnell",
-    4096,
-    "Fast local image generation model"), IImageGenerationModel;
+    DiffusionArchitecture.Flux,
+    Width: 768,
+    Height: 768,
+    Steps: 4,
+    CfgScale: 1.0f,
+    Vae: new ModelAsset("ae.safetensors", new Uri("https://huggingface.co/Kijai/flux-fp8/resolve/main/flux-vae-bf16.safetensors?download=true")),
+    ClipL: new ModelAsset("clip_l.safetensors", new Uri("https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/clip_l.safetensors?download=true")),
+    T5Xxl: new ModelAsset("t5xxl_fp8_e4m3fn.safetensors", new Uri("https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/t5xxl_fp8_e4m3fn.safetensors?download=true")),
+    Description: "Medium-sized local image generation model - good balance of speed and quality");
+
+public sealed record QwenImage() : LocalDiffusionModel(
+    Models.Local.QwenImage,
+    "qwen-image-Q4_0.gguf",
+    new Uri("https://huggingface.co/city96/Qwen-Image-gguf/resolve/main/qwen-image-Q4_0.gguf?download=true"),
+    "Qwen Image",
+    DiffusionArchitecture.QwenImage,
+    Width: 1024,
+    Height: 1024,
+    Steps: 20,
+    CfgScale: 4.0f,
+    Vae: new ModelAsset("qwen_image_vae.safetensors", new Uri("https://huggingface.co/Comfy-Org/Qwen-Image_ComfyUI/resolve/main/split_files/vae/qwen_image_vae.safetensors?download=true")),
+    Qwen2VL: new ModelAsset("Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf", new Uri("https://huggingface.co/mradermacher/Qwen2.5-VL-7B-Instruct-GGUF/resolve/main/Qwen2.5-VL-7B-Instruct.Q4_K_M.gguf?download=true")),
+    Description: "Largest local image generation model - 20B parameter Qwen-Image model, highest quality, requires significant RAM/VRAM");
 
 // ===== Embedding Model =====
 

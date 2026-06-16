@@ -264,10 +264,9 @@
     [Parameter] public EventCallback OnSettingsApplied { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
 
-    // Chat-appropriate local models (excludes embedding, TTS, image-gen, ONNX-only models)
+    // Chat-appropriate local models (excludes embedding, TTS, ONNX-only models; includes image-gen diffusion models)
     private static readonly LocalModel[] _chatLocalModels = ModelRegistry.GetAllLocal()
         .Where(m => m.DownloadUrl != null &&
-                    m is not IImageGenerationModel &&
                     !m.FileName.EndsWith(".onnx", StringComparison.OrdinalIgnoreCase) &&
                     !m.Name.Contains("Embed", StringComparison.OrdinalIgnoreCase))
         .OrderBy(m => m.Name)
@@ -570,6 +569,7 @@
         var caps = new List<string>();
         if (m is IVisionModel) caps.Add("Vision");
         if (m is IReasoningModel) caps.Add("Reasoning");
+        if (m is IImageGenerationModel) caps.Add("Image Gen");
         return caps.Count > 0 ? $"{m.Name}  [{string.Join(", ", caps)}]" : m.Name;
     }
 

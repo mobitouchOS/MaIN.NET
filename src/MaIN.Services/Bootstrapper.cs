@@ -46,7 +46,7 @@ public static class Bootstrapper
 // Register all concrete implementations as transient
         serviceCollection.AddTransient<LLMService>();
         serviceCollection.AddTransient<OpenAiService>();
-        serviceCollection.AddTransient<ImageGenService>();
+        serviceCollection.AddTransient<LocalImageGenService>();
         serviceCollection.AddTransient<OpenAiImageGenService>();
         
         serviceCollection.AddTransient<ITextToSpeechService, TextToSpeechService>();
@@ -148,10 +148,6 @@ public static class Bootstrapper
     
     private static IServiceCollection AddHttpClients(this IServiceCollection services)
     {
-        services.AddHttpClient(ServiceConstants.HttpClients.ImageGenClient, client =>
-        {
-            client.Timeout = TimeSpan.FromMinutes(5);
-        });
         services.AddHttpClient(ServiceConstants.HttpClients.OpenAiClient);
         services.AddHttpClient(ServiceConstants.HttpClients.GeminiClient);
         services.AddHttpClient(ServiceConstants.HttpClients.DeepSeekClient);

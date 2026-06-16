@@ -186,6 +186,8 @@ public static class Models
         public const string Kokoro82m = "kokoro-82m";
 
         // Image Generation
+        public const string StableDiffusion1_5 = "stable-diffusion-1.5";
         public const string Flux1Shnell = "FLUX.1_Shnell";
+        public const string QwenImage = "qwen-image";
     }
 }

@@ -363,6 +363,17 @@
                         => new GenericLocalReasoningModel(
                             FileName: fullPath, ReasonFunction: rm.ReasonFunction,
                             MaxContextWindowSize: localReg.MaxContextWindowSize),
+                    // Diffusion models can need extra asset files (VAE/CLIP/T5/etc) alongside the
+                    // main weights — point CustomPath at the resolved directory so every asset
+                    // (not just the main file) is found there.
+                    ILocalDiffusionModel dm
+                        => new GenericLocalImageGenerationModel(
+                            FileName: System.IO.Path.GetFileName(fullPath),
+                            Architecture: dm.Architecture,
+                            CustomPath: System.IO.Path.GetDirectoryName(fullPath),
+                            Width: dm.Width, Height: dm.Height,
+                            Steps: dm.Steps, CfgScale: dm.CfgScale,
+                            Vae: dm.Vae, ClipL: dm.ClipL, ClipG: dm.ClipG, T5Xxl: dm.T5Xxl, Qwen2VL: dm.Qwen2VL),
                     _ => new GenericLocalModel(
                             FileName: fullPath,
                             MaxContextWindowSize: localReg.MaxContextWindowSize)
