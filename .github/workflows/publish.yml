@@ -33,10 +33,10 @@ jobs:
         run: dotnet restore
 
       - name: Build solution
-        run: dotnet build --configuration Release --no-restore
+        run: dotnet build --configuration Release --no-restore -p:TargetFrameworks=net10.0
 
       - name: Run tests
-        run: dotnet test --configuration Release --no-build --verbosity normal --filter FullyQualifiedName\!~E2ETests
+        run: dotnet test --configuration Release --no-build --verbosity normal --filter FullyQualifiedName\!~E2ETests -p:TargetFrameworks=net10.0
 
       - name: Get version from .nupsec file
         run: |

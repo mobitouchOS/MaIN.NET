@@ -27,10 +27,10 @@ jobs:
         dotnet-version: '10.0.x'
 
     - name: Restore dependencies
-      run: dotnet restore src/MaIN.InferPage
+      run: dotnet restore src/MaIN.InferPage -p:TargetFrameworks=net10.0
 
     - name: Build project
-      run: dotnet build src/MaIN.InferPage --configuration Release --no-restore
+      run: dotnet build src/MaIN.InferPage --configuration Release --no-restore -p:TargetFrameworks=net10.0
 
     - name: Publish project
       run: dotnet publish src/MaIN.InferPage --framework net10.0 --configuration Release --output ./publish --no-build
