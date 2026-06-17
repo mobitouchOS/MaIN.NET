@@ -2,14 +2,14 @@
 <package>
   <metadata>
     <id>MaIN.NET</id>
-    <version>0.10.14</version>
+    <version>0.10.15</version>
     <authors>Wisedev</authors>
     <owners>Wisedev</owners>
     <icon>favicon.png</icon>
     <description>MaIN.NET - Package designed to streamline the integration of large language models (LLMs) into advanced AI workflows.</description>
     <license type="expression">MIT</license>
-    <projectUrl>https://github.com/wisedev-code/MaIN.NET</projectUrl>
-    <repository url="https://github.com/wisedev-code/MaIN.NET" type="git" />
+    <projectUrl>https://github.com/mobitouchOS/MaIN.NET</projectUrl>
+    <repository url="https://github.com/mobitouchOS/MaIN.NET" type="git" />
     <dependencies>
       <dependency id="GTranslate" version="2.3.1" />
       <dependency id="HtmlAgilityPack" version="1.12.4" />
