@@ -29,20 +29,20 @@ For more details on installation and configuration, please refer to our [documen
 
 ---
 
-## 🛠 MaIN CLI (mcli)
+  ## 🛠 MaIN Documentation (www.usemain.net)
 
-Enhance your development experience with the MaIN CLI (mcli)! This tool helps you:
-- ⚡ **Quickly test and validate ideas**
-- 🔧 **Configure essential settings automatically**
-- 📚 **Download known and validated LLM models**
-- 🖥 Run M.A.I.N as a backend server or launch demo environments
-- 💬 Interact via a streamlined chat UI
+  The interactive documentation at **[www.usemain.net](https://www.usemain.net)** lets you explore MaIN.NET through a set of specialised AI agents —
+  each tuned to a different kind of task.
 
-While you can start without it, we highly recommend using mcli for a smoother workflow. For download and usage details, please visit our [documentation cli page](https://maindoc.link/#/doc/cli). Once installed, try it out with:
+  | Agent | Purpose |
+  |-------|---------|
+  | **Chatty** | Answers framework questions and looks up docs with direct, no-fluff responses |
+  | **Code** | Generates complete, runnable C# projects wired to MaIN.NET and delivers them as a downloadable ZIP |
+  | **Design** | Architects multi-agent systems, recommends backend strategies, and researches patterns from the live repo |
+  | **Review** | Audits MaIN.NET usage for correctness, performance, and security; reviews GitHub PRs on request |
+  | **Forge** | All-in-one agent that combines Code, Design, and Review in a single conversation and can open GitHub PRs |
+  | **Flow** | Runs a full Design → Code → Review pipeline end-to-end, with a human approval step between each stage |
 
-```sh
-mcli help
-```
 
 ---
 
@@ -59,7 +59,7 @@ These resources will guide you through every aspect of the system and help you u
 
 ## 🌟 Our Vision
 
-M.A.I.N is more than just a package—it's a stepping stone towards a complete AI ecosystem. Our goal is to connect diverse AI techniques into one modular framework, making advanced AI accessible and affordable to all users. Built with a low-code philosophy in mind, M.A.I.N empowers developers and non-developers alike to create powerful AI applications with ease. To learn more about our future plans and upcoming features, please visit our **[Roadmap](./Docs/roadmap.md)**.
+M.A.I.N is more than just a package—it's a stepping stone towards a complete AI ecosystem. Our goal is to connect diverse AI techniques into one modular framework, making advanced AI accessible and affordable to all users. Built with a low-code philosophy in mind, M.A.I.N empowers developers and non-developers alike to create powerful AI applications with ease.
 
 ---
 
