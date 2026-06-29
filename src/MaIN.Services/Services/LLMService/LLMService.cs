@@ -79,6 +79,29 @@ public class LLMService : ILLMService
         if (ChatHelper.HasFiles(lastMsg))
         {
             var memoryOptions = ChatHelper.ExtractMemoryOptions(lastMsg);
+
+            // If tools and memory are both configured, we treat memory as a tool.
+            if (chat.ToolsConfiguration?.Tools is { Count: > 0 })
+            {
+                var ingestedMemory = await CreateIngestedMemoryAsync(chat, memoryOptions, cancellationToken);
+                var originalTools = chat.ToolsConfiguration;
+                try
+                {
+                    chat.ToolsConfiguration = new ToolsConfiguration
+                    {
+                        Tools = [.. originalTools.Tools, FileSearchTool.Create(ingestedMemory, cancellationToken)],
+                        ToolChoice = originalTools.ToolChoice,
+                        MaxIterations = originalTools.MaxIterations
+                    };
+                    return await ProcessWithToolsAsync(chat, requestOptions, cancellationToken);
+                }
+                finally
+                {
+                    chat.ToolsConfiguration = originalTools;
+                    await ingestedMemory.DisposeAsync();
+                }
+            }
+
             return await AskMemory(chat, memoryOptions, requestOptions, cancellationToken);
         }
 
@@ -112,6 +135,47 @@ public class LLMService : ILLMService
 
         session.Executor.Context.Dispose();
         return Task.CompletedTask;
+    }
+
+    private async Task<IIngestedMemory> CreateIngestedMemoryAsync(
+        Chat chat,
+        ChatMemoryOptions memoryOptions,
+        CancellationToken ct = default)
+    {
+        var model = GetLocalModel(chat);
+        var parameters = new ModelParams(ResolvePath(null, model.FileName))
+        {
+            GpuLayerCount = chat.MemoryParams.GpuLayerCount,
+            ContextSize = (uint)chat.MemoryParams.ContextSize,
+        };
+        var disableCache = chat.Properties.CheckProperty(ServiceConstants.Properties.DisableCacheProperty);
+        var llmModel = disableCache
+            ? await LLamaWeights.LoadFromFileAsync(parameters, ct)
+            : await ModelLoader.GetOrLoadModelAsync(modelsPath, model.FileName);
+
+        var (km, generator, textGenerator) = memoryFactory.CreateMemoryWithModel(
+            modelsPath,
+            llmModel,
+            model.FileName,
+            chat.MemoryParams);
+
+        await memoryService.ImportDataToMemory((km, generator), memoryOptions, ct);
+
+        return new IngestedMemory(km, async () =>
+        {
+            await km.DeleteIndexAsync(cancellationToken: ct);
+
+            if (disableCache)
+            {
+                llmModel.Dispose();
+                ModelLoader.RemoveModel(model.FileName);
+                textGenerator.Dispose();
+            }
+
+            generator._embedder.Dispose();
+            generator._embedder._weights.Dispose();
+            generator.Dispose();
+        });
     }
 
     public async Task<ChatResult?> AskMemory(

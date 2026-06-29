@@ -30,6 +30,8 @@ public abstract class OpenAiCompatibleService(
 {
     protected readonly INotificationService _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
     private readonly IHttpClientFactory _httpClientFactory = httpClientFactory ?? throw new ArgumentNullException(nameof(httpClientFactory));
+    protected readonly IMemoryFactory _memoryFactory = memoryFactory ?? throw new ArgumentNullException(nameof(memoryFactory));
+    protected readonly IMemoryService _memoryService = memoryService ?? throw new ArgumentNullException(nameof(memoryService));
 
     private static readonly ConcurrentDictionary<string, List<ChatMessage>> SessionCache = new();
     private static readonly HashSet<string> ImageExtensions = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".tif", ".heic", ".heif", ".avif"];
@@ -71,7 +73,31 @@ public abstract class OpenAiCompatibleService(
         StringBuilder resultBuilder = new();
         if (HasFiles(lastMessage))
         {
-            var result = ChatHelper.ExtractMemoryOptions(lastMessage);
+            var memoryOptions = ChatHelper.ExtractMemoryOptions(lastMessage);
+
+            // If tools and memory are both configured, we treat memory as a tool.
+            if (chat.ToolsConfiguration?.Tools is { Count: > 0 })
+            {
+                var ingestedMemory = await CreateIngestedMemoryAsync(chat, memoryOptions, cancellationToken);
+                var originalTools = chat.ToolsConfiguration;
+                try
+                {
+                    chat.ToolsConfiguration = new ToolsConfiguration
+                    {
+                        Tools = [.. originalTools.Tools, FileSearchTool.Create(ingestedMemory, cancellationToken)],
+                        ToolChoice = originalTools.ToolChoice,
+                        MaxIterations = originalTools.MaxIterations
+                    };
+                    return await ProcessWithToolsAsync(chat, conversation, apiKey, tokens, options, cancellationToken);
+                }
+                finally
+                {
+                    chat.ToolsConfiguration = originalTools;
+                    await ingestedMemory.DisposeAsync();
+                }
+            }
+
+            var result = memoryOptions;
             var memoryResult = await AskMemory(chat, result, options, cancellationToken);
             resultBuilder.Append(memoryResult!.Message.Content);
             lastMessage.MarkProcessed();
@@ -463,6 +489,16 @@ public abstract class OpenAiCompatibleService(
         }
 
         return message?.ToolCalls;
+    }
+
+    protected virtual async Task<IIngestedMemory> CreateIngestedMemoryAsync(
+        Chat chat,
+        ChatMemoryOptions memoryOptions,
+        CancellationToken ct = default)
+    {
+        var kernel = _memoryFactory.CreateMemoryWithOpenAi(GetApiKey(), chat.MemoryParams);
+        await _memoryService.ImportDataToMemory((kernel, null), memoryOptions, ct);
+        return new IngestedMemory(kernel, () => kernel.DeleteIndexAsync(cancellationToken: ct));
     }
 
     public virtual async Task<ChatResult?> AskMemory(
