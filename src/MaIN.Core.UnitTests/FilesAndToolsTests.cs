@@ -118,7 +118,7 @@ public class FilesAndToolsTests
 
         Assert.NotNull(_sentChat);
         var lastMessage = _sentChat.Messages.Last();
-        var hasFiles = lastMessage.Files is { Count: 2 };
+        var hasFiles = lastMessage.Files is { Count: > 0 };
         Assert.False(hasFiles);
     }
 }
