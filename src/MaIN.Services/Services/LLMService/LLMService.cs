@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
 using LLama;
@@ -29,7 +28,6 @@ namespace MaIN.Services.Services.LLMService;
 public class LLMService : ILLMService
 {
     private const string DEFAULT_MODEL_ENV_PATH = "MaIN_ModelsPath";
-    private static readonly ConcurrentDictionary<string, ChatSession> _sessionCache = new();
     private const int MaxToolIterations = 5;
 
     private readonly MaINSettings options;
@@ -126,16 +124,7 @@ public class LLMService : ILLMService
         return Task.FromResult(models);
     }
 
-    public Task CleanSessionCache(string? id)
-    {
-        if (string.IsNullOrEmpty(id) || !_sessionCache.TryRemove(id, out var session))
-        {
-            return Task.CompletedTask;
-        }
-
-        session.Executor.Context.Dispose();
-        return Task.CompletedTask;
-    }
+    public Task CleanSessionCache(string? id) => Task.CompletedTask;
 
     private async Task<IIngestedMemory> CreateIngestedMemoryAsync(
         Chat chat,
