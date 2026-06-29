@@ -41,7 +41,6 @@ For more details on installation and configuration, please refer to our [documen
   | **Design** | Architects multi-agent systems, recommends backend strategies, and researches patterns from the live repo |
   | **Review** | Audits MaIN.NET usage for correctness, performance, and security; reviews GitHub PRs on request |
   | **Forge** | All-in-one agent that combines Code, Design, and Review in a single conversation and can open GitHub PRs |
-  | **Flow** | Runs a full Design → Code → Review pipeline end-to-end, with a human approval step between each stage |
 
 
 ---
