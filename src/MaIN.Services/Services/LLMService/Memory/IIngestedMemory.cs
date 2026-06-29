@@ -2,7 +2,7 @@ using Microsoft.KernelMemory;
 
 namespace MaIN.Services.Services.LLMService.Memory;
 
-public interface IIngestedMemory : IAsyncDisposable
+internal interface IIngestedMemory : IAsyncDisposable
 {
     IKernelMemory Memory { get; }
 
