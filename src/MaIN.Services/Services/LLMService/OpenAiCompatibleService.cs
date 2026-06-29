@@ -491,7 +491,9 @@ public abstract class OpenAiCompatibleService(
         return message?.ToolCalls;
     }
 
-    protected virtual async Task<IIngestedMemory> CreateIngestedMemoryAsync(
+    // private protected is because IIngestedMemory is internal. This keyword allows the method to be overridden in
+    // derived classes within the same assembly.
+    private protected virtual async Task<IIngestedMemory> CreateIngestedMemoryAsync(
         Chat chat,
         ChatMemoryOptions memoryOptions,
         CancellationToken ct = default)
@@ -512,9 +514,6 @@ public abstract class OpenAiCompatibleService(
             return null;
         }
 
-        var kernel = memoryFactory.CreateMemoryWithOpenAi(GetApiKey(), chat.MemoryParams);
-        await memoryService.ImportDataToMemory((kernel, null), memoryOptions, cancellationToken);
-
         var lastMessage = chat.Messages.Last();
         var userQuery = lastMessage.Content;
 
@@ -528,8 +527,11 @@ public abstract class OpenAiCompatibleService(
         // If there are images, use SearchAsync + regular chat with images
         if (ChatHelper.HasImages(lastMessage))
         {
-            var searchResult = await kernel.SearchAsync(userQuery, cancellationToken: cancellationToken);
-            await kernel.DeleteIndexAsync(cancellationToken: cancellationToken);
+            SearchResult searchResult;
+            await using (var imagesMemory = await CreateIngestedMemoryAsync(chat, memoryOptions, cancellationToken))
+            {
+                searchResult = await imagesMemory.Memory.SearchAsync(userQuery, cancellationToken: cancellationToken);
+            }
 
             // Build context from search results
             var contextBuilder = new StringBuilder();
@@ -584,6 +586,8 @@ public abstract class OpenAiCompatibleService(
         }
 
         // No images - use standard AskAsync flow
+        await using var ingestedMemory = await CreateIngestedMemoryAsync(chat, memoryOptions, cancellationToken);
+        var kernel = ingestedMemory.Memory;
         MemoryAnswer retrievedContext;
         var standardTokens = new List<LLMTokenValue>();
 
@@ -684,7 +688,6 @@ public abstract class OpenAiCompatibleService(
             }
         }
 
-        await kernel.DeleteIndexAsync(cancellationToken: cancellationToken);
         return CreateChatResult(chat, retrievedContext.Result, standardTokens);
     }
 

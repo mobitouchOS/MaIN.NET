@@ -110,7 +110,7 @@ public sealed class VertexService(
         return await base.Send(chat, options, cancellationToken);
     }
 
-    protected override async Task<IIngestedMemory> CreateIngestedMemoryAsync(
+    private protected override async Task<IIngestedMemory> CreateIngestedMemoryAsync(
         Chat chat,
         ChatMemoryOptions memoryOptions,
         CancellationToken ct = default)

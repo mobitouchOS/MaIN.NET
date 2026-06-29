@@ -173,41 +173,15 @@ public class LLMService : ILLMService
         ChatRequestOptions requestOptions,
         CancellationToken cancellationToken = default)
     {
-        var model = GetLocalModel(chat);
-        var parameters = new ModelParams(ResolvePath(null, model.FileName))
-        {
-            GpuLayerCount = chat.MemoryParams.GpuLayerCount,
-            ContextSize = (uint)chat.MemoryParams.ContextSize,
-        };
-        var disableCache = chat.Properties.CheckProperty(ServiceConstants.Properties.DisableCacheProperty);
-        var llmModel = disableCache
-            ? await LLamaWeights.LoadFromFileAsync(parameters, cancellationToken)
-            : await ModelLoader.GetOrLoadModelAsync(modelsPath, model.FileName);
-
-        var (km, generator, textGenerator) = memoryFactory.CreateMemoryWithModel(
-            modelsPath,
-            llmModel,
-            model.FileName,
-            chat.MemoryParams);
-
-        await memoryService.ImportDataToMemory((km, generator), memoryOptions, cancellationToken);
         var userMessage = chat.Messages.Last();
 
         if (userMessage.Images?.Count > 0)
         {
-            var searchResult = await km.SearchAsync(userMessage.Content, cancellationToken: cancellationToken);
-            await km.DeleteIndexAsync(cancellationToken: cancellationToken);
-
-            if (disableCache)
+            SearchResult searchResult;
+            await using (var ingestedMemory = await CreateIngestedMemoryAsync(chat, memoryOptions, cancellationToken))
             {
-                llmModel.Dispose();
-                ModelLoader.RemoveModel(model.FileName);
-                textGenerator.Dispose();
+                searchResult = await ingestedMemory.Memory.SearchAsync(userMessage.Content, cancellationToken: cancellationToken);
             }
-
-            generator._embedder.Dispose();
-            generator._embedder._weights.Dispose();
-            generator.Dispose();
 
             var ctxBuilder = new StringBuilder();
             foreach (var citation in searchResult.Results.SelectMany(r => r.Partitions))
@@ -229,9 +203,10 @@ public class LLMService : ILLMService
             return chatResult;
         }
 
-        MemoryAnswer result;
-
+        await using var memory = await CreateIngestedMemoryAsync(chat, memoryOptions, cancellationToken);
+        var km = memory.Memory;
         var tokens = new List<LLMTokenValue>();
+        MemoryAnswer result;
 
         if (requestOptions.InteractiveUpdates || requestOptions.TokenCallback != null)
         {
@@ -292,19 +267,6 @@ public class LLMService : ILLMService
                 options: searchOptions,
                 cancellationToken: cancellationToken);
         }
-
-        await km.DeleteIndexAsync(cancellationToken: cancellationToken);
-
-        if (disableCache)
-        {
-            llmModel.Dispose();
-            ModelLoader.RemoveModel(model.FileName);
-            textGenerator.Dispose();
-        }
-
-        generator._embedder.Dispose();
-        generator._embedder._weights.Dispose();
-        generator.Dispose();
 
         return new ChatResult
         {

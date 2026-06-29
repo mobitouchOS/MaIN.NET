@@ -100,7 +100,7 @@ public sealed class GeminiService(
         }
     }
 
-    protected override async Task<IIngestedMemory> CreateIngestedMemoryAsync(
+    private protected override async Task<IIngestedMemory> CreateIngestedMemoryAsync(
         Chat chat,
         ChatMemoryOptions memoryOptions,
         CancellationToken ct = default)
@@ -121,10 +121,6 @@ public sealed class GeminiService(
             return null;
         }
 
-        var kernel = _memoryFactory.CreateMemoryWithGemini(GetApiKey(), chat.MemoryParams);
-
-        await _memoryService.ImportDataToMemory((kernel, null), memoryOptions, cancellationToken);
-
         var userQuery = chat.Messages.Last().Content;
         if (chat.MemoryParams.Grammar != null)
         {
@@ -137,8 +133,11 @@ public sealed class GeminiService(
         var lastMessage = chat.Messages.Last();
         if (lastMessage.Images?.Count > 0)
         {
-            var searchResult = await kernel.SearchAsync(userQuery, cancellationToken: cancellationToken);
-            await kernel.DeleteIndexAsync(cancellationToken: cancellationToken);
+            SearchResult searchResult;
+            await using (var ingestedMemory = await CreateIngestedMemoryAsync(chat, memoryOptions, cancellationToken))
+            {
+                searchResult = await ingestedMemory.Memory.SearchAsync(userQuery, cancellationToken: cancellationToken);
+            }
 
             var ctxBuilder = new StringBuilder();
             foreach (var citation in searchResult.Results.SelectMany(r => r.Partitions))
@@ -160,6 +159,8 @@ public sealed class GeminiService(
             return result;
         }
 
+        await using var memory = await CreateIngestedMemoryAsync(chat, memoryOptions, cancellationToken);
+        var kernel = memory.Memory;
         MemoryAnswer retrievedContext;
 
         if (requestOptions.InteractiveUpdates || requestOptions.TokenCallback != null)
@@ -218,7 +219,6 @@ public sealed class GeminiService(
         }
 
         chat.Messages.Last().MarkProcessed();
-        await kernel.DeleteIndexAsync(cancellationToken: cancellationToken);
         return CreateChatResult(chat, retrievedContext.Result, []);
     }
 }
