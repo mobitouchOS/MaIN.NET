@@ -152,7 +152,7 @@ public class LLMService : ILLMService
 
         return new IngestedMemory(km, async () =>
         {
-            await km.DeleteIndexAsync(cancellationToken: ct);
+            await km.DeleteIndexAsync();
 
             if (disableCache)
             {

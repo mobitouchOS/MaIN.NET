@@ -127,7 +127,7 @@ public sealed class VertexService(
             chat.MemoryParams);
 
         await _memoryService.ImportDataToMemory((kernel, null), memoryOptions, ct);
-        return new IngestedMemory(kernel, () => kernel.DeleteIndexAsync(cancellationToken: ct));
+        return new IngestedMemory(kernel, () => kernel.DeleteIndexAsync());
     }
 
     /// <summary>

@@ -107,7 +107,7 @@ public sealed class GeminiService(
     {
         var kernel = _memoryFactory.CreateMemoryWithGemini(GetApiKey(), chat.MemoryParams);
         await _memoryService.ImportDataToMemory((kernel, null), memoryOptions, ct);
-        return new IngestedMemory(kernel, () => kernel.DeleteIndexAsync(cancellationToken: ct));
+        return new IngestedMemory(kernel, () => kernel.DeleteIndexAsync());
     }
 
     public override async Task<ChatResult?> AskMemory(
