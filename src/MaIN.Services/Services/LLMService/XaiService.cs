@@ -31,6 +31,7 @@ public sealed class XaiService(
     protected override string ChatCompletionsUrl => ServiceConstants.ApiUrls.XaiOpenAiChatCompletions;
     protected override string ModelsUrl => ServiceConstants.ApiUrls.XaiModels;
     protected override Type ExpectedParamsType => typeof(XaiInferenceParams);
+    protected override bool SupportsSemanticSearch => false;
 
     protected override string GetApiKey()
     {

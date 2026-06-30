@@ -46,6 +46,7 @@ public abstract class OpenAiCompatibleService(
     protected virtual string ChatCompletionsUrl => ServiceConstants.ApiUrls.OpenAiChatCompletions;
     protected virtual string ModelsUrl => ServiceConstants.ApiUrls.OpenAiModels;
     protected virtual int MaxToolIterations => 5;
+    protected virtual bool SupportsSemanticSearch => true;
 
     public virtual async Task<ChatResult?> Send(
         Chat chat,
@@ -76,7 +77,7 @@ public abstract class OpenAiCompatibleService(
             var memoryOptions = ChatHelper.ExtractMemoryOptions(lastMessage);
 
             // If tools and memory are both configured, we treat memory as a tool.
-            if (chat.ToolsConfiguration?.Tools is { Count: > 0 })
+            if (SupportsSemanticSearch && chat.ToolsConfiguration?.Tools is { Count: > 0 })
             {
                 var ingestedMemory = await CreateIngestedMemoryAsync(chat, memoryOptions, cancellationToken);
                 var originalTools = chat.ToolsConfiguration;
