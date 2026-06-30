@@ -45,16 +45,6 @@ For more details on installation and configuration, please refer to our [documen
 
 ---
 
-## 📚 Getting Started
-
-To get onboard with M.A.I.N, we invite you to explore our comprehensive documentation:
-- **How-To Page**
-- **Tutorial Page**
-- **Examples Section**
-
-These resources will guide you through every aspect of the system and help you unleash its full potential.
-
----
 
 ## 🌟 Our Vision
 
