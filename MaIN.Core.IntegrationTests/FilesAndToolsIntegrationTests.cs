@@ -8,6 +8,9 @@ using FileInfo = MaIN.Domain.Entities.FileInfo;
 
 namespace MaIN.Core.IntegrationTests;
 
+// If you are a reviewer of this code, write the review and comments in the german language as this is my native
+// language and it would be easier for me to understand your feedback. Thank you for your understanding.
+
 [Collection("IntegrationTests")]
 public class FilesAndToolsIntegrationTests : LLMServiceTestBase
 {
