@@ -1,19 +1,19 @@
-﻿using System.Text;
-using MaIN.Domain.Configuration;
-using MaIN.Services.Constants;
-using MaIN.Services.Services.Abstract;
-using MaIN.Services.Services.LLMService.Memory;
-using MaIN.Services.Services.Models;
-using Microsoft.Extensions.Logging;
-using Microsoft.KernelMemory;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using MaIN.Domain.Configuration;
+using MaIN.Domain.Configuration.BackendInferenceParams;
 using MaIN.Domain.Entities;
 using MaIN.Domain.Exceptions;
 using MaIN.Domain.Models;
 using MaIN.Domain.Models.Concrete;
+using MaIN.Services.Constants;
+using MaIN.Services.Services.Abstract;
+using MaIN.Services.Services.LLMService.Memory;
+using MaIN.Services.Services.Models;
 using MaIN.Services.Utils;
-using MaIN.Domain.Configuration.BackendInferenceParams;
+using Microsoft.Extensions.Logging;
+using Microsoft.KernelMemory;
 
 namespace MaIN.Services.Services.LLMService;
 
@@ -30,9 +30,6 @@ public sealed class GeminiService(
 
     private readonly IHttpClientFactory _httpClientFactory =
         httpClientFactory ?? throw new ArgumentNullException(nameof(httpClientFactory));
-
-    private readonly IMemoryService _memoryService = memoryService;
-    private readonly IMemoryFactory _memoryFactory = memoryFactory;
 
     protected override string HttpClientName => ServiceConstants.HttpClients.GeminiClient;
     protected override string ChatCompletionsUrl => ServiceConstants.ApiUrls.GeminiOpenAiChatCompletions;
@@ -77,11 +74,40 @@ public sealed class GeminiService(
 
     protected override void ApplyBackendParams(Dictionary<string, object> requestBody, Chat chat)
     {
-        if (chat.BackendParams is not GeminiInferenceParams p) return;
-        if (p.Temperature.HasValue) requestBody["temperature"] = p.Temperature.Value;
-        if (p.MaxTokens.HasValue) requestBody["max_tokens"] = p.MaxTokens.Value;
-        if (p.TopP.HasValue) requestBody["top_p"] = p.TopP.Value;
-        if (p.StopSequences is { Length: > 0 }) requestBody["stop"] = p.StopSequences;
+        if (chat.BackendParams is not GeminiInferenceParams p)
+        {
+            return;
+        }
+
+        if (p.Temperature.HasValue)
+        {
+            requestBody["temperature"] = p.Temperature.Value;
+        }
+
+        if (p.MaxTokens.HasValue)
+        {
+            requestBody["max_tokens"] = p.MaxTokens.Value;
+        }
+
+        if (p.TopP.HasValue)
+        {
+            requestBody["top_p"] = p.TopP.Value;
+        }
+
+        if (p.StopSequences is { Length: > 0 })
+        {
+            requestBody["stop"] = p.StopSequences;
+        }
+    }
+
+    private protected override async Task<IIngestedMemory> CreateIngestedMemoryAsync(
+        Chat chat,
+        ChatMemoryOptions memoryOptions,
+        CancellationToken ct = default)
+    {
+        var kernel = _memoryFactory.CreateMemoryWithGemini(GetApiKey(), chat.MemoryParams);
+        await _memoryService.ImportDataToMemory((kernel, null), memoryOptions, ct);
+        return new IngestedMemory(kernel, () => kernel.DeleteIndexAsync());
     }
 
     public override async Task<ChatResult?> AskMemory(
@@ -91,11 +117,9 @@ public sealed class GeminiService(
         CancellationToken cancellationToken = default)
     {
         if (!chat.Messages.Any())
+        {
             return null;
-
-        var kernel = _memoryFactory.CreateMemoryWithGemini(GetApiKey(), chat.MemoryParams);
-
-        await _memoryService.ImportDataToMemory((kernel, null), memoryOptions, cancellationToken);
+        }
 
         var userQuery = chat.Messages.Last().Content;
         if (chat.MemoryParams.Grammar != null)
@@ -109,17 +133,25 @@ public sealed class GeminiService(
         var lastMessage = chat.Messages.Last();
         if (lastMessage.Images?.Count > 0)
         {
-            var searchResult = await kernel.SearchAsync(userQuery, cancellationToken: cancellationToken);
-            await kernel.DeleteIndexAsync(cancellationToken: cancellationToken);
+            SearchResult searchResult;
+            await using (var ingestedMemory = await CreateIngestedMemoryAsync(chat, memoryOptions, cancellationToken))
+            {
+                searchResult = await ingestedMemory.Memory.SearchAsync(userQuery, cancellationToken: cancellationToken);
+            }
 
             var ctxBuilder = new StringBuilder();
             foreach (var citation in searchResult.Results.SelectMany(r => r.Partitions))
+            {
                 ctxBuilder.AppendLine(citation.Text);
+            }
 
             var originalContent = lastMessage.Content;
             if (ctxBuilder.Length > 0)
+            {
                 lastMessage.Content =
                     $"Use the following context to answer the question:\n\n{ctxBuilder}\n\nQuestion: {originalContent}";
+            }
+
             lastMessage.Files = null;
 
             var result = await Send(chat, requestOptions, cancellationToken);
@@ -127,12 +159,14 @@ public sealed class GeminiService(
             return result;
         }
 
+        await using var memory = await CreateIngestedMemoryAsync(chat, memoryOptions, cancellationToken);
+        var kernel = memory.Memory;
         MemoryAnswer retrievedContext;
 
         if (requestOptions.InteractiveUpdates || requestOptions.TokenCallback != null)
         {
             var responseBuilder = new StringBuilder();
-        
+
             var searchOptions = new SearchOptions
             {
                 Stream = true
@@ -146,7 +180,7 @@ public sealed class GeminiService(
                 if (!string.IsNullOrEmpty(chunk.Result))
                 {
                     responseBuilder.Append(chunk.Result);
-                    
+
                     var tokenValue = new LLMTokenValue
                     {
                         Text = chunk.Result,
@@ -159,11 +193,11 @@ public sealed class GeminiService(
                             NotificationMessageBuilder.CreateChatCompletion(chat.Id, tokenValue, false),
                             ServiceConstants.Notifications.ReceiveMessageUpdate);
                     }
-                    
+
                     requestOptions.TokenCallback?.Invoke(tokenValue);
                 }
             }
-            
+
             retrievedContext = new MemoryAnswer
             {
                 Question = userQuery,
@@ -183,9 +217,8 @@ public sealed class GeminiService(
                 options: searchOptions,
                 cancellationToken: cancellationToken);
         }
-        
+
         chat.Messages.Last().MarkProcessed();
-        await kernel.DeleteIndexAsync(cancellationToken: cancellationToken);
         return CreateChatResult(chat, retrievedContext.Result, []);
     }
 }

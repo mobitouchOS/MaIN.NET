@@ -30,6 +30,8 @@ public abstract class OpenAiCompatibleService(
 {
     protected readonly INotificationService _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
     private readonly IHttpClientFactory _httpClientFactory = httpClientFactory ?? throw new ArgumentNullException(nameof(httpClientFactory));
+    protected readonly IMemoryFactory _memoryFactory = memoryFactory ?? throw new ArgumentNullException(nameof(memoryFactory));
+    protected readonly IMemoryService _memoryService = memoryService ?? throw new ArgumentNullException(nameof(memoryService));
 
     private static readonly ConcurrentDictionary<string, List<ChatMessage>> SessionCache = new();
     private static readonly HashSet<string> ImageExtensions = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".tif", ".heic", ".heif", ".avif"];
@@ -44,6 +46,7 @@ public abstract class OpenAiCompatibleService(
     protected virtual string ChatCompletionsUrl => ServiceConstants.ApiUrls.OpenAiChatCompletions;
     protected virtual string ModelsUrl => ServiceConstants.ApiUrls.OpenAiModels;
     protected virtual int MaxToolIterations => 5;
+    protected virtual bool SupportsSemanticSearch => true;
 
     public virtual async Task<ChatResult?> Send(
         Chat chat,
@@ -71,7 +74,31 @@ public abstract class OpenAiCompatibleService(
         StringBuilder resultBuilder = new();
         if (HasFiles(lastMessage))
         {
-            var result = ChatHelper.ExtractMemoryOptions(lastMessage);
+            var memoryOptions = ChatHelper.ExtractMemoryOptions(lastMessage);
+
+            // If tools and memory are both configured, we treat memory as a tool.
+            if (SupportsSemanticSearch && chat.ToolsConfiguration?.Tools is { Count: > 0 })
+            {
+                var ingestedMemory = await CreateIngestedMemoryAsync(chat, memoryOptions, cancellationToken);
+                var originalTools = chat.ToolsConfiguration;
+                try
+                {
+                    chat.ToolsConfiguration = new ToolsConfiguration
+                    {
+                        Tools = [.. originalTools.Tools, FileSearchTool.Create(ingestedMemory, cancellationToken)],
+                        ToolChoice = originalTools.ToolChoice,
+                        MaxIterations = originalTools.MaxIterations
+                    };
+                    return await ProcessWithToolsAsync(chat, conversation, apiKey, tokens, options, cancellationToken);
+                }
+                finally
+                {
+                    chat.ToolsConfiguration = originalTools;
+                    await ingestedMemory.DisposeAsync();
+                }
+            }
+
+            var result = memoryOptions;
             var memoryResult = await AskMemory(chat, result, options, cancellationToken);
             resultBuilder.Append(memoryResult!.Message.Content);
             lastMessage.MarkProcessed();
@@ -278,8 +305,8 @@ public abstract class OpenAiCompatibleService(
         }
 
         chat.Messages.Last().MarkProcessed();
-        UpdateSessionCache(chat.Id, resultBuilder.ToString(), options.CreateSession);
-        return CreateChatResult(chat, resultBuilder.ToString(), tokens);
+        UpdateSessionCache(chat.Id, finalResponse, options.CreateSession);
+        return CreateChatResult(chat, finalResponse, tokens);
     }
 
     private async Task<List<ToolCall>?> ProcessStreamingChatWithToolsAsync(
@@ -465,6 +492,18 @@ public abstract class OpenAiCompatibleService(
         return message?.ToolCalls;
     }
 
+    // private protected is because IIngestedMemory is internal. This keyword allows the method to be overridden in
+    // derived classes within the same assembly.
+    private protected virtual async Task<IIngestedMemory> CreateIngestedMemoryAsync(
+        Chat chat,
+        ChatMemoryOptions memoryOptions,
+        CancellationToken ct = default)
+    {
+        var kernel = _memoryFactory.CreateMemoryWithOpenAi(GetApiKey(), chat.MemoryParams);
+        await _memoryService.ImportDataToMemory((kernel, null), memoryOptions, ct);
+        return new IngestedMemory(kernel, () => kernel.DeleteIndexAsync());
+    }
+
     public virtual async Task<ChatResult?> AskMemory(
         Chat chat,
         ChatMemoryOptions memoryOptions,
@@ -475,9 +514,6 @@ public abstract class OpenAiCompatibleService(
         {
             return null;
         }
-
-        var kernel = memoryFactory.CreateMemoryWithOpenAi(GetApiKey(), chat.MemoryParams);
-        await memoryService.ImportDataToMemory((kernel, null), memoryOptions, cancellationToken);
 
         var lastMessage = chat.Messages.Last();
         var userQuery = lastMessage.Content;
@@ -492,8 +528,11 @@ public abstract class OpenAiCompatibleService(
         // If there are images, use SearchAsync + regular chat with images
         if (ChatHelper.HasImages(lastMessage))
         {
-            var searchResult = await kernel.SearchAsync(userQuery, cancellationToken: cancellationToken);
-            await kernel.DeleteIndexAsync(cancellationToken: cancellationToken);
+            SearchResult searchResult;
+            await using (var imagesMemory = await CreateIngestedMemoryAsync(chat, memoryOptions, cancellationToken))
+            {
+                searchResult = await imagesMemory.Memory.SearchAsync(userQuery, cancellationToken: cancellationToken);
+            }
 
             // Build context from search results
             var contextBuilder = new StringBuilder();
@@ -548,6 +587,8 @@ public abstract class OpenAiCompatibleService(
         }
 
         // No images - use standard AskAsync flow
+        await using var ingestedMemory = await CreateIngestedMemoryAsync(chat, memoryOptions, cancellationToken);
+        var kernel = ingestedMemory.Memory;
         MemoryAnswer retrievedContext;
         var standardTokens = new List<LLMTokenValue>();
 
@@ -648,7 +689,6 @@ public abstract class OpenAiCompatibleService(
             }
         }
 
-        await kernel.DeleteIndexAsync(cancellationToken: cancellationToken);
         return CreateChatResult(chat, retrievedContext.Result, standardTokens);
     }
 

@@ -58,29 +58,76 @@ public sealed class VertexService(
     {
         var auth = Auth;
         if (string.IsNullOrEmpty(auth.ProjectId))
+        {
             throw new InvalidOperationException("GoogleServiceAccountConfig.ProjectId is required.");
+        }
+
         if (string.IsNullOrEmpty(auth.ClientEmail))
+        {
             throw new InvalidOperationException("GoogleServiceAccountConfig.ClientEmail is required.");
+        }
+
         if (string.IsNullOrEmpty(auth.PrivateKey))
+        {
             throw new InvalidOperationException("GoogleServiceAccountConfig.PrivateKey is required.");
+        }
     }
 
     protected override void ApplyBackendParams(Dictionary<string, object> requestBody, Chat chat)
     {
-        if (chat.BackendParams is not VertexInferenceParams p) return;
-        if (p.Temperature.HasValue) requestBody["temperature"] = p.Temperature.Value;
-        if (p.MaxTokens.HasValue) requestBody["max_tokens"] = p.MaxTokens.Value;
-        if (p.TopP.HasValue) requestBody["top_p"] = p.TopP.Value;
-        if (p.StopSequences is { Length: > 0 }) requestBody["stop"] = p.StopSequences;
+        if (chat.BackendParams is not VertexInferenceParams p)
+        {
+            return;
+        }
+
+        if (p.Temperature.HasValue)
+        {
+            requestBody["temperature"] = p.Temperature.Value;
+        }
+
+        if (p.MaxTokens.HasValue)
+        {
+            requestBody["max_tokens"] = p.MaxTokens.Value;
+        }
+
+        if (p.TopP.HasValue)
+        {
+            requestBody["top_p"] = p.TopP.Value;
+        }
+
+        if (p.StopSequences is { Length: > 0 })
+        {
+            requestBody["stop"] = p.StopSequences;
+        }
     }
 
-    public new async Task<ChatResult?> Send(
+    public override async Task<ChatResult?> Send(
         Chat chat,
         ChatRequestOptions options,
         CancellationToken cancellationToken = default)
     {
         ExtractLocation(chat);
         return await base.Send(chat, options, cancellationToken);
+    }
+
+    private protected override async Task<IIngestedMemory> CreateIngestedMemoryAsync(
+        Chat chat,
+        ChatMemoryOptions memoryOptions,
+        CancellationToken ct = default)
+    {
+        var auth = Auth;
+        _tokenProvider ??= new GoogleServiceAccountTokenProvider(auth);
+        var httpClient = _httpClientFactory.CreateClient(HttpClientName);
+        var tokenProvider = _tokenProvider;
+
+        var kernel = _memoryFactory.CreateMemoryWithVertex(
+            () => new ValueTask<string>(Task.Run(() => tokenProvider.GetAccessTokenAsync(httpClient))),
+            _location,
+            auth.ProjectId,
+            chat.MemoryParams);
+
+        await _memoryService.ImportDataToMemory((kernel, null), memoryOptions, ct);
+        return new IngestedMemory(kernel, () => kernel.DeleteIndexAsync());
     }
 
     /// <summary>
@@ -97,7 +144,9 @@ public sealed class VertexService(
         ExtractLocation(chat);
 
         if (!chat.Messages.Any())
+        {
             return null;
+        }
 
         var lastMessage = chat.Messages.Last();
         var originalContent = lastMessage.Content;
@@ -139,7 +188,9 @@ public sealed class VertexService(
     private static void CollectTextData(ChatMemoryOptions options, StringBuilder textContext)
     {
         foreach (var (name, content) in options.TextData)
+        {
             AppendDocument(textContext, name, content);
+        }
     }
 
     private static async Task CollectFilesData(
@@ -149,9 +200,13 @@ public sealed class VertexService(
         foreach (var (name, path) in options.FilesData)
         {
             if (IsNativeMultimodalFile(name))
+            {
                 inlineBytes.Add(await File.ReadAllBytesAsync(path, cancellationToken));
+            }
             else
+            {
                 AppendDocument(textContext, name, DocumentProcessor.ProcessDocument(path));
+            }
         }
     }
 
@@ -161,7 +216,11 @@ public sealed class VertexService(
     {
         foreach (var (name, stream) in options.StreamData)
         {
-            if (stream.CanSeek) stream.Position = 0;
+            if (stream.CanSeek)
+            {
+                stream.Position = 0;
+            }
+
             using var ms = new MemoryStream();
             await stream.CopyToAsync(ms, cancellationToken);
             var bytes = ms.ToArray();
@@ -180,7 +239,10 @@ public sealed class VertexService(
                 }
                 finally
                 {
-                    if (File.Exists(tempPath)) File.Delete(tempPath);
+                    if (File.Exists(tempPath))
+                    {
+                        File.Delete(tempPath);
+                    }
                 }
             }
         }
@@ -188,7 +250,11 @@ public sealed class VertexService(
 
     private static void CollectMemoryItems(ChatMemoryOptions options, StringBuilder textContext)
     {
-        if (options.Memory is not { Count: > 0 }) return;
+        if (options.Memory is not { Count: > 0 })
+        {
+            return;
+        }
+
         foreach (var item in options.Memory)
         {
             textContext.AppendLine(item);
@@ -212,6 +278,7 @@ public sealed class VertexService(
             query.Append(documentContext);
             query.AppendLine();
         }
+
         query.Append(userQuestion);
 
         if (grammar != null)
@@ -227,7 +294,9 @@ public sealed class VertexService(
     private static List<byte[]>? MergeInlineContent(List<byte[]>? existingImages, List<byte[]> newBytes)
     {
         if ((existingImages == null || existingImages.Count == 0) && newBytes.Count == 0)
+        {
             return null;
+        }
 
         var merged = new List<byte[]>(existingImages ?? []);
         merged.AddRange(newBytes);
@@ -239,6 +308,8 @@ public sealed class VertexService(
     private void ExtractLocation(Chat chat)
     {
         if (chat.BackendParams is VertexInferenceParams vp)
+        {
             _location = vp.Location;
+        }
     }
 }

@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
 using LLama;
@@ -29,7 +28,6 @@ namespace MaIN.Services.Services.LLMService;
 public class LLMService : ILLMService
 {
     private const string DEFAULT_MODEL_ENV_PATH = "MaIN_ModelsPath";
-    private static readonly ConcurrentDictionary<string, ChatSession> _sessionCache = new();
     private const int MaxToolIterations = 5;
 
     private readonly MaINSettings options;
@@ -79,6 +77,29 @@ public class LLMService : ILLMService
         if (ChatHelper.HasFiles(lastMsg))
         {
             var memoryOptions = ChatHelper.ExtractMemoryOptions(lastMsg);
+
+            // If tools and memory are both configured, we treat memory as a tool.
+            if (chat.ToolsConfiguration?.Tools is { Count: > 0 })
+            {
+                var ingestedMemory = await CreateIngestedMemoryAsync(chat, memoryOptions, cancellationToken);
+                var originalTools = chat.ToolsConfiguration;
+                try
+                {
+                    chat.ToolsConfiguration = new ToolsConfiguration
+                    {
+                        Tools = [.. originalTools.Tools, FileSearchTool.Create(ingestedMemory, cancellationToken)],
+                        ToolChoice = originalTools.ToolChoice,
+                        MaxIterations = originalTools.MaxIterations
+                    };
+                    return await ProcessWithToolsAsync(chat, requestOptions, cancellationToken);
+                }
+                finally
+                {
+                    chat.ToolsConfiguration = originalTools;
+                    await ingestedMemory.DisposeAsync();
+                }
+            }
+
             return await AskMemory(chat, memoryOptions, requestOptions, cancellationToken);
         }
 
@@ -103,22 +124,12 @@ public class LLMService : ILLMService
         return Task.FromResult(models);
     }
 
-    public Task CleanSessionCache(string? id)
-    {
-        if (string.IsNullOrEmpty(id) || !_sessionCache.TryRemove(id, out var session))
-        {
-            return Task.CompletedTask;
-        }
+    public Task CleanSessionCache(string? id) => Task.CompletedTask;
 
-        session.Executor.Context.Dispose();
-        return Task.CompletedTask;
-    }
-
-    public async Task<ChatResult?> AskMemory(
+    private async Task<IIngestedMemory> CreateIngestedMemoryAsync(
         Chat chat,
         ChatMemoryOptions memoryOptions,
-        ChatRequestOptions requestOptions,
-        CancellationToken cancellationToken = default)
+        CancellationToken ct = default)
     {
         var model = GetLocalModel(chat);
         var parameters = new ModelParams(ResolvePath(null, model.FileName))
@@ -128,7 +139,7 @@ public class LLMService : ILLMService
         };
         var disableCache = chat.Properties.CheckProperty(ServiceConstants.Properties.DisableCacheProperty);
         var llmModel = disableCache
-            ? await LLamaWeights.LoadFromFileAsync(parameters, cancellationToken)
+            ? await LLamaWeights.LoadFromFileAsync(parameters, ct)
             : await ModelLoader.GetOrLoadModelAsync(modelsPath, model.FileName);
 
         var (km, generator, textGenerator) = memoryFactory.CreateMemoryWithModel(
@@ -137,13 +148,11 @@ public class LLMService : ILLMService
             model.FileName,
             chat.MemoryParams);
 
-        await memoryService.ImportDataToMemory((km, generator), memoryOptions, cancellationToken);
-        var userMessage = chat.Messages.Last();
+        await memoryService.ImportDataToMemory((km, generator), memoryOptions, ct);
 
-        if (userMessage.Images?.Count > 0)
+        return new IngestedMemory(km, async () =>
         {
-            var searchResult = await km.SearchAsync(userMessage.Content, cancellationToken: cancellationToken);
-            await km.DeleteIndexAsync(cancellationToken: cancellationToken);
+            await km.DeleteIndexAsync();
 
             if (disableCache)
             {
@@ -155,6 +164,24 @@ public class LLMService : ILLMService
             generator._embedder.Dispose();
             generator._embedder._weights.Dispose();
             generator.Dispose();
+        });
+    }
+
+    public async Task<ChatResult?> AskMemory(
+        Chat chat,
+        ChatMemoryOptions memoryOptions,
+        ChatRequestOptions requestOptions,
+        CancellationToken cancellationToken = default)
+    {
+        var userMessage = chat.Messages.Last();
+
+        if (userMessage.Images?.Count > 0)
+        {
+            SearchResult searchResult;
+            await using (var ingestedMemory = await CreateIngestedMemoryAsync(chat, memoryOptions, cancellationToken))
+            {
+                searchResult = await ingestedMemory.Memory.SearchAsync(userMessage.Content, cancellationToken: cancellationToken);
+            }
 
             var ctxBuilder = new StringBuilder();
             foreach (var citation in searchResult.Results.SelectMany(r => r.Partitions))
@@ -176,9 +203,10 @@ public class LLMService : ILLMService
             return chatResult;
         }
 
-        MemoryAnswer result;
-
+        await using var memory = await CreateIngestedMemoryAsync(chat, memoryOptions, cancellationToken);
+        var km = memory.Memory;
         var tokens = new List<LLMTokenValue>();
+        MemoryAnswer result;
 
         if (requestOptions.InteractiveUpdates || requestOptions.TokenCallback != null)
         {
@@ -239,19 +267,6 @@ public class LLMService : ILLMService
                 options: searchOptions,
                 cancellationToken: cancellationToken);
         }
-
-        await km.DeleteIndexAsync(cancellationToken: cancellationToken);
-
-        if (disableCache)
-        {
-            llmModel.Dispose();
-            ModelLoader.RemoveModel(model.FileName);
-            textGenerator.Dispose();
-        }
-
-        generator._embedder.Dispose();
-        generator._embedder._weights.Dispose();
-        generator.Dispose();
 
         return new ChatResult
         {

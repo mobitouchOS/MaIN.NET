@@ -33,6 +33,7 @@ public sealed class DeepSeekService(
     protected override string ChatCompletionsUrl => ServiceConstants.ApiUrls.DeepSeekOpenAiChatCompletions;
     protected override string ModelsUrl => ServiceConstants.ApiUrls.DeepSeekModels;
     protected override Type ExpectedParamsType => typeof(DeepSeekInferenceParams);
+    protected override bool SupportsSemanticSearch => false;
 
     protected override string GetApiKey()
     {
