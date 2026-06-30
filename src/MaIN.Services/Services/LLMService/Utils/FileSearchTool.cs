@@ -8,8 +8,6 @@ internal static class FileSearchTool
 {
     public const string Name = "search_documents";
 
-    private static readonly JsonSerializerOptions s_jsonOptions = new() { PropertyNameCaseInsensitive = true };
-
     public static ToolDefinition Create(IIngestedMemory memory, CancellationToken ct = default)
     {
         return new ToolDefinition
@@ -56,12 +54,13 @@ internal static class FileSearchTool
         try
         {
             using var doc = JsonDocument.Parse(argsJson);
-            if (doc.RootElement.TryGetProperty("query", out var queryElement))
+            if (doc.RootElement.ValueKind == JsonValueKind.Object
+                && doc.RootElement.TryGetProperty("query", out var queryElement))
             {
                 return queryElement.GetString() ?? argsJson;
             }
         }
-        catch (JsonException)
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException)
         {
             // Raw string fallback — some local backends emit the query directly.
         }
