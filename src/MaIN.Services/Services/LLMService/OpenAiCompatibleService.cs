@@ -304,8 +304,8 @@ public abstract class OpenAiCompatibleService(
         }
 
         chat.Messages.Last().MarkProcessed();
-        UpdateSessionCache(chat.Id, resultBuilder.ToString(), options.CreateSession);
-        return CreateChatResult(chat, resultBuilder.ToString(), tokens);
+        UpdateSessionCache(chat.Id, finalResponse, options.CreateSession);
+        return CreateChatResult(chat, finalResponse, tokens);
     }
 
     private async Task<List<ToolCall>?> ProcessStreamingChatWithToolsAsync(

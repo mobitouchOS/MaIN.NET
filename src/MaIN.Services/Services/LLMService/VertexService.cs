@@ -101,7 +101,7 @@ public sealed class VertexService(
         }
     }
 
-    public new async Task<ChatResult?> Send(
+    public override async Task<ChatResult?> Send(
         Chat chat,
         ChatRequestOptions options,
         CancellationToken cancellationToken = default)
