@@ -37,6 +37,7 @@ public static class Models
         public const string ClaudeHaiku4_5 = "claude-haiku-4-5-20251001";
         public const string ClaudeSonnet4 = "claude-sonnet-4-20250514";
         public const string ClaudeSonnet4_5 = "claude-sonnet-4-5-20250929";
+        public const string ClaudeSonnet5 = "claude-sonnet-5";
     }
 
     public static class Gemini
