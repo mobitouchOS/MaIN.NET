@@ -266,6 +266,16 @@ public sealed record ClaudeSonnet4_5() : CloudModel(
     public string? MMProjectName => null;
 }
 
+public sealed record ClaudeSonnet5() : CloudModel(
+    Models.Anthropic.ClaudeSonnet5,
+    BackendType.Anthropic,
+    "Claude Sonnet 5",
+    200000,
+    "Anthropic's latest Sonnet model with enhanced reasoning and multimodal capabilities"), IVisionModel
+{
+    public string? MMProjectName => null;
+}
+
 // ===== Gemini Models =====
 
 public sealed record Gemini3_5Flash() : CloudModel(
