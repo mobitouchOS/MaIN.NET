@@ -10,6 +10,31 @@ using Microsoft.FluentUI.AspNetCore.Components;
 using MaIN.InferPage.Components;
 using Utils = MaIN.InferPage.Utils;
 
+// Reads --flagName from the raw CLI args first (unambiguous — nothing accidentally passes this
+// as a process argument), falling back to a plain environment variable. envVarName is
+// deliberately a different string than flagName for "path": builder.Configuration["path"] would
+// also match the OS's PATH environment variable (case-insensitive matching), silently feeding
+// the system search path into Directory.CreateDirectory(...) below. Environment.GetEnvironmentVariable
+// only matches the exact name given, so "modelPath" cannot collide with "PATH".
+static string? GetExplicitCliOrEnvValue(string[] args, string flagName, string envVarName)
+{
+    var equalsPrefix = $"--{flagName}=";
+    for (var i = 0; i < args.Length; i++)
+    {
+        if (args[i].StartsWith(equalsPrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return args[i][equalsPrefix.Length..];
+        }
+
+        if (string.Equals(args[i], $"--{flagName}", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
+        {
+            return args[i + 1];
+        }
+    }
+
+    return Environment.GetEnvironmentVariable(envVarName);
+}
+
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents()
@@ -33,7 +58,7 @@ if (!builder.Environment.IsDevelopment())
 try
 {
     var modelArg = builder.Configuration["model"];
-    var modelPathArg = builder.Configuration["path"];
+    var modelPathArg = GetExplicitCliOrEnvValue(args, "path", "modelPath");
     var backendArg = builder.Configuration["backend"];
     var modelUrlArg = builder.Configuration["modelUrl"];
 
