@@ -25,8 +25,14 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       XAI_API_KEY: ${XAI_API_KEY:-}
       OLLAMA_API_KEY: ${OLLAMA_API_KEY:-}
-      # Only used when backend=ollama and INFERPAGE_TARGET=runtime-ollama (external Ollama server).
-      MaIN__OllamaBaseUrl: ${OLLAMA_BASE_URL:-}
+      # MaIN__OllamaBaseUrl is deliberately NOT set here. src/Dockerfile.inferpage already bakes in
+      # the right default per target (http://host.docker.internal:11434 for runtime-ollama,
+      # http://localhost:11434 for runtime-ollama-bundled) via its own ENV instructions. Compose
+      # environment values always override an image's ENV default -- even an empty string from an
+      # unset ${VAR:-} -- so defining this key here with a blank fallback would silently break both
+      # Ollama targets' working defaults. Only set it if you need a non-default Ollama location,
+      # e.g.: `OLLAMA_BASE_URL=http://my-ollama-host:11434 docker compose ... run -e MaIN__OllamaBaseUrl=$OLLAMA_BASE_URL inferpage`
+      # or via a `docker-compose.override.yml`.
     volumes:
       - inferpage-models:/app/Models
       - inferpage-dataprotection-keys:/app/DataProtection-Keys
