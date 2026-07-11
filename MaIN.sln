@@ -29,6 +29,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MaIN.Core.IntegrationTests"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MaIN.Core.E2ETests", "MaIN.Core.E2ETests\MaIN.Core.E2ETests.csproj", "{2C15062A-E9F6-47FC-A4CD-1190A49E3FE3}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MaIN.InferPage.IntegrationTests", "MaIN.InferPage.IntegrationTests\MaIN.InferPage.IntegrationTests.csproj", "{3E7A9C4B-2D6F-4E81-9A3C-5B7D8E1F0C6A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -79,6 +81,10 @@ Global
 		{2C15062A-E9F6-47FC-A4CD-1190A49E3FE3}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{2C15062A-E9F6-47FC-A4CD-1190A49E3FE3}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{2C15062A-E9F6-47FC-A4CD-1190A49E3FE3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3E7A9C4B-2D6F-4E81-9A3C-5B7D8E1F0C6A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3E7A9C4B-2D6F-4E81-9A3C-5B7D8E1F0C6A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3E7A9C4B-2D6F-4E81-9A3C-5B7D8E1F0C6A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3E7A9C4B-2D6F-4E81-9A3C-5B7D8E1F0C6A}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -90,6 +96,7 @@ Global
 		{C3D4E5F6-A7B8-9012-C3D4-E5F6A7B89012} = {53D24B04-279D-4D18-8829-EA0F57AE69F3}
 		{2C15062A-E9F6-47FC-A4CD-1190A49E3FE3} = {53D24B04-279D-4D18-8829-EA0F57AE69F3}
 		{7A6E2C1D-4F3B-4A9E-9C5D-1B8E6F2A9D34} = {53D24B04-279D-4D18-8829-EA0F57AE69F3}
+		{3E7A9C4B-2D6F-4E81-9A3C-5B7D8E1F0C6A} = {53D24B04-279D-4D18-8829-EA0F57AE69F3}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {82494AB7-60FC-49E3-B37C-B9785FB0DE7A}
