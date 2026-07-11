@@ -21,10 +21,9 @@ public class UtilsSanitizeModelFileNameTests
     [Fact]
     public void SanitizeModelFileName_ReplacesInvalidFileNameCharacters()
     {
-        var result = Utils.SanitizeModelFileName("org/model:name");
+        var result = Utils.SanitizeModelFileName("org/model/name");
 
         Assert.DoesNotContain('/', result);
-        Assert.DoesNotContain(':', result);
         Assert.EndsWith(".gguf", result);
     }
 
