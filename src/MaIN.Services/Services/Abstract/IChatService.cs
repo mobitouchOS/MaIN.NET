@@ -1,4 +1,5 @@
 using MaIN.Domain.Entities;
+using MaIN.Domain.Entities.Tools;
 using MaIN.Domain.Models;
 using MaIN.Services.Services.Models;
 
@@ -12,6 +13,7 @@ public interface IChatService
         bool translatePrompt = false,
         bool interactiveUpdates = false,
         Func<LLMTokenValue?, Task>? changeOfValue = null,
+        Func<ToolInvocation, Task>? toolCallback = null,
         CancellationToken cancellationToken = default);
     Task Delete(string id);
     Task<Chat> GetById(string id);

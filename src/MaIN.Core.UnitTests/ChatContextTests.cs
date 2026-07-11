@@ -1,6 +1,7 @@
 using MaIN.Core.Hub.Contexts;
 using MaIN.Domain.Configuration;
 using MaIN.Domain.Entities;
+using MaIN.Domain.Models;
 using MaIN.Domain.Models.Abstract;
 using MaIN.Services.Services.Abstract;
 using MaIN.Services.Services.Models;
@@ -103,6 +104,7 @@ public class ChatContextTests
                 It.IsAny<bool>(),
                 It.IsAny<bool>(),
                 null,
+                null,
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(chatResult);
 
@@ -118,6 +120,7 @@ public class ChatContextTests
                 It.IsAny<Chat>(),
                 false,
                 false,
+                null,
                 null,
                 It.IsAny<CancellationToken>()),
             Times.Once);
@@ -153,7 +156,59 @@ public class ChatContextTests
                 It.IsAny<bool>(),
                 It.IsAny<bool>(),
                 null,
+                null,
                 It.IsAny<CancellationToken>()),
             Times.Once);
+    }
+
+    [Fact]
+    public async Task CompleteAsync_ShouldPassToolCallbackThrough()
+    {
+        // Arrange
+        var chatResult = new ChatResult()
+        {
+            Model = "test-model",
+            Message = new Message
+            {
+                Role = "Assistant",
+                Content = "test-message",
+                Type = MessageType.LocalLLM
+            }
+        };
+
+        Func<MaIN.Domain.Entities.Tools.ToolInvocation, Task>? capturedCallback = null;
+
+        _mockChatService
+            .Setup(s => s.Completions(
+                It.IsAny<Chat>(),
+                It.IsAny<bool>(),
+                It.IsAny<bool>(),
+                null,
+                It.IsAny<Func<MaIN.Domain.Entities.Tools.ToolInvocation, Task>?>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<Chat, bool, bool, Func<LLMTokenValue?, Task>?, Func<MaIN.Domain.Entities.Tools.ToolInvocation, Task>?, CancellationToken>(
+                (_, _, _, _, toolCallback, _) => capturedCallback = toolCallback)
+            .ReturnsAsync(chatResult);
+
+        _chatContext.WithModel(_testModelId).WithMessage("User message");
+
+        var receivedInvocations = new List<MaIN.Domain.Entities.Tools.ToolInvocation>();
+        Task MyToolCallback(MaIN.Domain.Entities.Tools.ToolInvocation invocation)
+        {
+            receivedInvocations.Add(invocation);
+            return Task.CompletedTask;
+        }
+
+        // Act
+        await _chatContext.CompleteAsync(toolCallback: MyToolCallback);
+        Assert.NotNull(capturedCallback);
+        // Invoke whatever delegate actually reached IChatService.Completions and confirm it's
+        // the same callback (proven via its side effect, not delegate reference/object equality,
+        // which is unreliable for local-function-to-delegate conversions).
+        await capturedCallback!(new MaIN.Domain.Entities.Tools.ToolInvocation { ToolName = "test_tool", Arguments = "{}", Done = false });
+
+        // Assert
+        Assert.Single(receivedInvocations);
+        Assert.Equal("test_tool", receivedInvocations[0].ToolName);
     }
 }

@@ -1,6 +1,7 @@
 using MaIN.Domain.Configuration;
 using MaIN.Domain.Configuration.BackendInferenceParams;
 using MaIN.Domain.Entities;
+using MaIN.Domain.Entities.Tools;
 using MaIN.Domain.Exceptions.Chats;
 using MaIN.Domain.Models;
 using MaIN.Domain.Models.Abstract;
@@ -31,6 +32,7 @@ public class ChatService(
         bool translate = false,
         bool interactiveUpdates = false,
         Func<LLMTokenValue?, Task>? changeOfValue = null,
+        Func<ToolInvocation, Task>? toolCallback = null,
         CancellationToken cancellationToken = default)
     {
         if (!ModelRegistry.TryGetById(chat.ModelId, out var model))
@@ -72,7 +74,8 @@ public class ChatService(
             : await llmServiceFactory.CreateService(backend).Send(chat, new ChatRequestOptions()
             {
                 InteractiveUpdates = interactiveUpdates,
-                TokenCallback = changeOfValue
+                TokenCallback = changeOfValue,
+                ToolCallback = toolCallback
             }, cancellationToken);
 
         if (translate)

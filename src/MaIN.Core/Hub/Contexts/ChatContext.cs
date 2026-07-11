@@ -179,6 +179,7 @@ public sealed class ChatContext : IChatBuilderEntryPoint, IChatMessageBuilder, I
         bool translate = false, // Move to WithTranslate
         bool interactive = false, // Move to WithInteractive
         Func<LLMTokenValue?, Task>? changeOfValue = null,
+        Func<ToolInvocation, Task>? toolCallback = null,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrEmpty(_chat.ModelId))
@@ -212,6 +213,7 @@ public sealed class ChatContext : IChatBuilderEntryPoint, IChatMessageBuilder, I
             translate,
             interactive,
             changeOfValue,
+            toolCallback,
             cancellationToken);
         _files = [];
         return result;
