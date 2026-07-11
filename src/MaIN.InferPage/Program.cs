@@ -3,6 +3,7 @@ using MaIN.Core.Hub;
 using MaIN.Domain.Configuration;
 using MaIN.Domain.Models.Concrete;
 using MaIN.Domain.Models.Abstract;
+using MaIN.InferPage.Endpoints;
 using MaIN.InferPage.Services;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.FluentUI.AspNetCore.Components;
@@ -34,6 +35,7 @@ try
     var modelArg = builder.Configuration["model"];
     var modelPathArg = builder.Configuration["path"];
     var backendArg = builder.Configuration["backend"];
+    var modelUrlArg = builder.Configuration["modelUrl"];
 
     bool hasCommandLineConfig = backendArg != null || modelArg != null;
 
@@ -92,6 +94,24 @@ try
                     Utils.Path = defaultPath;
                     Console.WriteLine($"No --path provided. Using default models directory: {defaultPath}");
                 }
+                else
+                {
+                    var modelsDirectory = modelPathArg.EndsWith(".gguf", StringComparison.OrdinalIgnoreCase)
+                        ? System.IO.Path.GetDirectoryName(modelPathArg) ?? Utils.DefaultModelsPath
+                        : modelPathArg;
+                    Directory.CreateDirectory(modelsDirectory);
+                    Environment.SetEnvironmentVariable("MaIN_ModelsPath", modelsDirectory);
+                }
+
+                if (!ModelRegistry.Exists(modelArg) && !string.IsNullOrEmpty(modelUrlArg))
+                {
+                    var fileName = Utils.SanitizeModelFileName(modelArg);
+                    ModelRegistry.RegisterOrReplace(new GenericLocalModel(
+                        FileName: fileName,
+                        Id: modelArg,
+                        DownloadUrl: new Uri(modelUrlArg)));
+                    Console.WriteLine($"Registered custom model '{modelArg}' for download from {modelUrlArg}");
+                }
             }
         }
         else
@@ -111,9 +131,12 @@ catch (Exception ex)
     return;
 }
 
-// For Self backend CLI mode, validate model before registering
+// For Self backend CLI mode, validate model before registering.
+// Utils.Path is always set by this point for Self + a model arg (see above), so the previous
+// "Utils.Path == null" clause never actually triggered this guard — dropped so an unrecognized
+// model name (with no modelUrl to register it) is now caught here instead of failing later.
 if (!Utils.NeedsConfiguration && Utils.BackendType == BackendType.Self
-    && Utils.Path == null && !ModelRegistry.Exists(Utils.Model!))
+    && !ModelRegistry.Exists(Utils.Model!))
 {
     Console.WriteLine($"Model: {Utils.Model} is not supported");
     Environment.Exit(0);
@@ -140,7 +163,19 @@ app.UseStaticFiles();
 app.UseAntiforgery();
 app.Services.UseMaIN();
 AIHub.Extensions.DisableLLamaLogs();
+
+if (!Utils.NeedsConfiguration && Utils.BackendType == BackendType.Self && !string.IsNullOrEmpty(Utils.Model))
+{
+    if (!AIHub.Model().Exists(Utils.Model))
+    {
+        Console.WriteLine($"Downloading model '{Utils.Model}'...");
+        await AIHub.Model().EnsureDownloadedAsync(Utils.Model);
+        Console.WriteLine($"Model '{Utils.Model}' is ready.");
+    }
+}
+
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
+app.MapOpenAiCompatEndpoints();
 
 app.Run();
