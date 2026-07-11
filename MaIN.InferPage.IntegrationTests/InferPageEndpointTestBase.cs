@@ -16,7 +16,7 @@ public class InferPageEndpointTestCollection
 {
 }
 
-public abstract class InferPageEndpointTestBase : IAsyncDisposable
+public abstract class InferPageEndpointTestBase : IAsyncLifetime
 {
     protected const string ModelId = "gpt-4o-mini";
 
@@ -99,7 +99,9 @@ public abstract class InferPageEndpointTestBase : IAsyncDisposable
         }
         """;
 
-    public async ValueTask DisposeAsync()
+    public Task InitializeAsync() => Task.CompletedTask;
+
+    public async Task DisposeAsync()
     {
         Client.Dispose();
         await _app.DisposeAsync();
