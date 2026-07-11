@@ -247,6 +247,32 @@
                     <span class="api-key-hint">Multimodal projector file (must be in the models folder)</span>
                 </div>
             }
+
+            <div class="settings-field">
+                <label class="settings-label">OpenAI-Compatible API Key (optional)</label>
+                <div class="api-key-row">
+                    <FluentTextField @bind-Value="_openAiCompatApiKeyInput"
+                                     Placeholder="Leave blank to allow unauthenticated access"
+                                     TextFieldType="@(_showOpenAiCompatApiKey ? TextFieldType.Text : TextFieldType.Password)"
+                                     Style="flex: 1;" />
+                    <FluentButton Appearance="Appearance.Lightweight"
+                                  Style="--neutral-fill-stealth-rest: transparent; --neutral-fill-stealth-hover: rgba(128,128,128,0.15); --neutral-fill-stealth-active: rgba(128,128,128,0.25);"
+                                  OnClick="@(() => _showOpenAiCompatApiKey = !_showOpenAiCompatApiKey)"
+                                  IconStart="@(_showOpenAiCompatApiKey
+                                      ? new Icons.Regular.Size20.EyeOff()
+                                      : (Icon)new Icons.Regular.Size20.Eye())">
+                    </FluentButton>
+                </div>
+                @if (!string.IsNullOrEmpty(_openAiCompatSavedKeyPreview))
+                {
+                    <span class="api-key-hint">Saved: @_openAiCompatSavedKeyPreview</span>
+                }
+                <span class="api-key-hint">
+                    Required as a Bearer token by external clients calling this instance's
+                    <code>/v1/chat/completions</code> and <code>/v1/models</code> endpoints. Leave blank
+                    to allow unauthenticated access on these routes.
+                </span>
+            </div>
         </div>
 
         <div class="settings-footer">
@@ -281,6 +307,11 @@
     private string? _apiKeyInput;
     private string? _savedKeyPreview;
     private bool _showApiKey;
+
+    private string? _openAiCompatApiKeyInput;
+    private string? _openAiCompatSavedKeyPreview;
+    private bool _showOpenAiCompatApiKey;
+    private const string OpenAiCompatApiKeyStorageKey = "OpenAiCompatEndpoint";
 
     // Vertex AI auth fields
     private string? _vertexProjectId;
@@ -486,6 +517,9 @@
 
         if (_selectedBackend != null)
             await LoadApiKeyPreview();
+
+        var savedOpenAiCompatKey = await SettingsStorage.GetApiKeyForBackendAsync(OpenAiCompatApiKeyStorageKey);
+        _openAiCompatSavedKeyPreview = string.IsNullOrEmpty(savedOpenAiCompatKey) ? null : MaskApiKey(savedOpenAiCompatKey);
     }
 
     private async Task OnBackendChanged()
@@ -785,6 +819,21 @@
             MaINSettings,
             apiKey,
             vertexAuth);
+
+        // OpenAI-compatible endpoint's own Bearer key -- independent of the chat backend's API key above.
+        // Blank input falls back to whatever was previously saved (matching the existing provider-key
+        // behavior elsewhere on this page, which never clears a saved key just because the field is empty).
+        string? openAiCompatApiKey;
+        if (!string.IsNullOrWhiteSpace(_openAiCompatApiKeyInput))
+        {
+            openAiCompatApiKey = _openAiCompatApiKeyInput;
+            await SettingsStorage.SaveApiKeyAsync(OpenAiCompatApiKeyStorageKey, openAiCompatApiKey);
+        }
+        else
+        {
+            openAiCompatApiKey = await SettingsStorage.GetApiKeyForBackendAsync(OpenAiCompatApiKeyStorageKey);
+        }
+        Environment.SetEnvironmentVariable("MaIN__ApiKey", openAiCompatApiKey);
 
         await OnSettingsApplied.InvokeAsync();
     }
