@@ -3,6 +3,7 @@ using MaIN.Core.Hub;
 using MaIN.Core.Hub.Utils;
 using MaIN.Domain.Entities.Tools;
 using MaIN.Domain.Models.Abstract;
+using MaIN.Services.Services.Models;
 
 namespace MaIN.InferPage.Endpoints;
 
@@ -90,11 +91,19 @@ public static class OpenAiCompatEndpoints
 
             if (isStreaming)
             {
-                await HandleStreamingRequest(configuredContext, promptText, httpResponse, ct);
-                return Results.Empty;
+                return await HandleStreamingRequest(configuredContext, httpResponse, ct);
             }
 
-            var result = await configuredContext.CompleteAsync(cancellationToken: ct);
+            ChatResult result;
+            try
+            {
+                result = await configuredContext.CompleteAsync(cancellationToken: ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                return ServerError(ex);
+            }
+
             var response = new ChatCompletionResponse
             {
                 Model = Utils.Model,
@@ -148,9 +157,18 @@ public static class OpenAiCompatEndpoints
         OpenAiJsonOptions.Options,
         statusCode: StatusCodes.Status404NotFound);
 
-    private static async Task HandleStreamingRequest(
+    private static OpenAiErrorResponse ErrorResponse(Exception ex) => new()
+    {
+        Error = new OpenAiError { Message = ex.Message, Type = "server_error" }
+    };
+
+    private static IResult ServerError(Exception ex) => Results.Json(
+        ErrorResponse(ex),
+        OpenAiJsonOptions.Options,
+        statusCode: StatusCodes.Status500InternalServerError);
+
+    private static async Task<IResult> HandleStreamingRequest(
         MaIN.Core.Hub.Contexts.Interfaces.ChatContext.IChatConfigurationBuilder context,
-        string promptText,
         HttpResponse response,
         CancellationToken ct)
     {
@@ -161,38 +179,59 @@ public static class OpenAiCompatEndpoints
         var created = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         var roleSent = false;
 
-        await context.CompleteAsync(
-            changeOfValue: async token =>
-            {
-                if (token is null || token.Type != MaIN.Domain.Models.TokenType.Message)
+        try
+        {
+            await context.CompleteAsync(
+                changeOfValue: async token =>
                 {
-                    return;
-                }
+                    if (token is null || token.Type != MaIN.Domain.Models.TokenType.Message)
+                    {
+                        return;
+                    }
 
-                var chunk = new ChatCompletionChunk
-                {
-                    Id = chunkId,
-                    Created = created,
-                    Model = Utils.Model ?? string.Empty,
-                    Choices =
-                    [
-                        new ChatCompletionChunkChoice
-                        {
-                            Index = 0,
-                            Delta = new ChatCompletionChunkDelta
+                    var chunk = new ChatCompletionChunk
+                    {
+                        Id = chunkId,
+                        Created = created,
+                        Model = Utils.Model ?? string.Empty,
+                        Choices =
+                        [
+                            new ChatCompletionChunkChoice
                             {
-                                Role = roleSent ? null : "assistant",
-                                Content = token.Text
+                                Index = 0,
+                                Delta = new ChatCompletionChunkDelta
+                                {
+                                    Role = roleSent ? null : "assistant",
+                                    Content = token.Text
+                                }
                             }
-                        }
-                    ]
-                };
-                roleSent = true;
+                        ]
+                    };
+                    roleSent = true;
 
-                await response.WriteAsync($"data: {JsonSerializer.Serialize(chunk, OpenAiJsonOptions.Options)}\n\n", ct);
-                await response.Body.FlushAsync(ct);
-            },
-            cancellationToken: ct);
+                    await response.WriteAsync($"data: {JsonSerializer.Serialize(chunk, OpenAiJsonOptions.Options)}\n\n", ct);
+                    await response.Body.FlushAsync(ct);
+                },
+                cancellationToken: ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // response.ContentType above does not itself commit the response -- ASP.NET Core only
+            // sends headers on the first body write/flush. So if generation fails before any token
+            // was streamed (response.HasStarted is false), we can still return a normal
+            // OpenAI-shaped JSON error with a real status code. Once at least one chunk has been
+            // flushed, headers are already committed and status code can no longer change -- the
+            // only OpenAI-compatible option left is a terminal SSE error frame followed by [DONE].
+            if (!response.HasStarted)
+            {
+                return ServerError(ex);
+            }
+
+            await response.WriteAsync($"data: {JsonSerializer.Serialize(ErrorResponse(ex), OpenAiJsonOptions.Options)}\n\n", ct);
+            await response.WriteAsync("data: [DONE]\n\n", ct);
+            await response.Body.FlushAsync(ct);
+            return Results.Empty;
+        }
 
         var finalChunk = new ChatCompletionChunk
         {
@@ -207,6 +246,7 @@ public static class OpenAiCompatEndpoints
         await response.WriteAsync($"data: {JsonSerializer.Serialize(finalChunk, OpenAiJsonOptions.Options)}\n\n", ct);
         await response.WriteAsync("data: [DONE]\n\n", ct);
         await response.Body.FlushAsync(ct);
+        return Results.Empty;
     }
 
     private static async Task<IResult> HandleToolCallingRequest(
@@ -247,16 +287,31 @@ public static class OpenAiCompatEndpoints
         context.WithTools(toolsBuilder.Build());
 
         var invocations = new List<ToolInvocation>();
-        var result = await context.CompleteAsync(
-            toolCallback: invocation =>
-            {
-                if (!invocation.Done)
+        ChatResult result;
+        try
+        {
+            // This callback must stay synchronous: the cloud adapters (OpenAiCompatibleService,
+            // AnthropicService) invoke ToolCallback without awaiting it, unlike the local LLMService
+            // path which does await it. Adding real async work here (I/O, further awaits) would race
+            // against -- or silently drop calls on -- those cloud backends.
+            result = await context.CompleteAsync(
+                toolCallback: invocation =>
                 {
-                    invocations.Add(invocation);
-                }
-                return Task.CompletedTask;
-            },
-            cancellationToken: ct);
+                    if (!invocation.Done)
+                    {
+                        invocations.Add(invocation);
+                    }
+                    return Task.CompletedTask;
+                },
+                cancellationToken: ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Safe to return a plain JSON error here regardless of isStreaming -- nothing has been
+            // written to the response yet at this point (ContentType is only switched to
+            // text/event-stream further below, once we know whether this is a tool-calls response).
+            return ServerError(ex);
+        }
 
         ChatCompletionResponseMessage message;
         string finishReason;
@@ -287,8 +342,8 @@ public static class OpenAiCompatEndpoints
         }
 
         // Tool-calling responses are emitted as a single terminal SSE chunk rather than true
-        // token-by-token streaming -- see design doc: streaming a local model's raw tool-call
-        // formatting tokens would leak internal syntax into user-visible content deltas.
+        // token-by-token streaming: streaming a local model's raw tool-call formatting tokens
+        // would leak internal syntax into user-visible content deltas.
         response.ContentType = "text/event-stream";
         response.Headers.CacheControl = "no-cache";
         var chunk = new ChatCompletionChunk

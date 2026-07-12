@@ -33,14 +33,17 @@ public class OpenAiCompatEndpointE2ETests : IAsyncLifetime
         {
             Args = ["--urls", "http://127.0.0.1:0"]
         });
-
-        builder.Services.AddMaIN(builder.Configuration);
+        
+        builder.Services.AddMaIN(builder.Configuration, settings =>
+        {
+            settings.ModelsPath = Path.Combine(Directory.GetCurrentDirectory(), "models");
+        });
 
         _app = builder.Build();
         _app.Services.UseMaIN();
         _app.MapOpenAiCompatEndpoints();
         _app.Start();
-
+        
         await AIHub.Model().EnsureDownloadedAsync(ModelId);
 
         _client = new HttpClient { BaseAddress = new Uri(_app.Urls.First()) };

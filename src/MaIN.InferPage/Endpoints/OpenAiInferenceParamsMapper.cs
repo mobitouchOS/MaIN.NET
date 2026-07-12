@@ -84,7 +84,16 @@ public static class OpenAiInferenceParamsMapper
                 StopSequences = request.Stop?.ToArray(),
                 Grammar = grammar
             },
-            _ => new LocalInferenceParams { Grammar = grammar }
+            // Unreachable today (every BackendType member is handled above) -- mirrors the Self
+            // case's defaults rather than leaving MaxTokens at 0 if BackendType ever grows a member
+            // this switch doesn't yet know about.
+            _ => new LocalInferenceParams
+            {
+                Temperature = temperature ?? 0.8f,
+                TopP = topP ?? 0.9f,
+                MaxTokens = request.MaxTokens ?? -1,
+                Grammar = grammar
+            }
         };
     }
 

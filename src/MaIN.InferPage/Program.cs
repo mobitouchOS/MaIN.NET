@@ -133,11 +133,14 @@ try
                 if (!ModelRegistry.Exists(modelArg) && !string.IsNullOrEmpty(modelUrlArg))
                 {
                     var fileName = Utils.SanitizeModelFileName(modelArg);
+                    var downloadUrl = new Uri(modelUrlArg);
                     ModelRegistry.RegisterOrReplace(new GenericLocalModel(
                         FileName: fileName,
                         Id: modelArg,
-                        DownloadUrl: new Uri(modelUrlArg)));
-                    Console.WriteLine($"Registered custom model '{modelArg}' for download from {modelUrlArg}");
+                        DownloadUrl: downloadUrl));
+                    // Log only scheme+host+path -- modelUrl may carry a SAS/presigned token in its
+                    // query string, which must never land in console/container logs.
+                    Console.WriteLine($"Registered custom model '{modelArg}' for download from {downloadUrl.GetLeftPart(UriPartial.Path)}");
                 }
             }
         }
