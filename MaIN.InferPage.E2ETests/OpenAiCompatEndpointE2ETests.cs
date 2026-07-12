@@ -36,7 +36,7 @@ public class OpenAiCompatEndpointE2ETests : IAsyncLifetime
         
         builder.Services.AddMaIN(builder.Configuration, settings =>
         {
-            settings.ModelsPath = Path.Combine(Directory.GetCurrentDirectory(), "models");
+            settings.ModelsPath = Path.Combine(Directory.GetCurrentDirectory());
         });
 
         _app = builder.Build();
