@@ -30,6 +30,7 @@ public sealed class OllamaService(
     protected override string ChatCompletionsUrl => HasApiKey ? ServiceConstants.ApiUrls.OllamaOpenAiChatCompletions : $"{LocalBaseUrl}/v1/chat/completions";
     protected override string ModelsUrl => HasApiKey ? ServiceConstants.ApiUrls.OllamaModels : $"{LocalBaseUrl}/v1/models";
     protected override Type ExpectedParamsType => typeof(OllamaInferenceParams);
+    protected override bool SupportsSemanticSearch => false;
 
     protected override string GetApiKey()
     {

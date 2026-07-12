@@ -27,6 +27,7 @@ public sealed class GroqCloudService(
     protected override string ChatCompletionsUrl => ServiceConstants.ApiUrls.GroqCloudOpenAiChatCompletions;
     protected override string ModelsUrl => ServiceConstants.ApiUrls.GroqCloudModels;
     protected override Type ExpectedParamsType => typeof(GroqCloudInferenceParams);
+    protected override bool SupportsSemanticSearch => false;
 
     protected override string GetApiKey()
     {
