@@ -8,6 +8,7 @@ using MaIN.InferPage.Services;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.FluentUI.AspNetCore.Components;
 using MaIN.InferPage.Components;
+using Scalar.AspNetCore;
 using Utils = MaIN.InferPage.Utils;
 
 // Reads --flagName from the raw CLI args first (unambiguous — nothing accidentally passes this
@@ -45,6 +46,7 @@ builder.Services.AddRazorComponents()
 builder.Services.AddFluentUIComponents();
 builder.Services.AddScoped<SettingsService>();
 builder.Services.AddScoped<SettingsStateService>();
+builder.Services.AddOpenApi();
 
 if (!builder.Environment.IsDevelopment())
 {
@@ -202,5 +204,12 @@ if (!Utils.NeedsConfiguration && Utils.BackendType == BackendType.Self && !strin
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 app.MapOpenAiCompatEndpoints();
+
+// Interactive API docs for the OpenAI-compatible endpoint (/scalar/v1), backed by the
+// standard ASP.NET Core OpenAPI document at /openapi/v1.json -- exposed unconditionally
+// (not just in Development) since self-hosted InferPage instances are commonly run in
+// Docker/Production and this is the primary way an operator tests the API by hand.
+app.MapOpenApi();
+app.MapScalarApiReference();
 
 app.Run();

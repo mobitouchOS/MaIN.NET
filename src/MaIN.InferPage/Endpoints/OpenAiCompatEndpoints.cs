@@ -25,7 +25,12 @@ public static class OpenAiCompatEndpoints
             };
 
             return Results.Json(response, OpenAiJsonOptions.Options);
-        });
+        })
+        .WithName("ListModels")
+        .WithTags("OpenAI-Compatible API")
+        .WithSummary("Lists the model this InferPage instance is currently serving.")
+        .Produces<ModelListResponse>()
+        .Produces<OpenAiErrorResponse>(StatusCodes.Status401Unauthorized);
 
         app.MapPost("/v1/chat/completions", async (HttpRequest httpRequest, HttpResponse httpResponse, CancellationToken ct) =>
         {
@@ -107,7 +112,15 @@ public static class OpenAiCompatEndpoints
             };
 
             return Results.Json(response, OpenAiJsonOptions.Options);
-        });
+        })
+        .WithName("CreateChatCompletion")
+        .WithTags("OpenAI-Compatible API")
+        .WithSummary("OpenAI-compatible chat completions -- supports streaming (SSE), tool calling, and response_format.")
+        .Accepts<ChatCompletionRequest>("application/json")
+        .Produces<ChatCompletionResponse>()
+        .Produces<OpenAiErrorResponse>(StatusCodes.Status400BadRequest)
+        .Produces<OpenAiErrorResponse>(StatusCodes.Status401Unauthorized)
+        .Produces<OpenAiErrorResponse>(StatusCodes.Status404NotFound);
     }
 
     private static bool IsAuthorized(HttpRequest request, out OpenAiErrorResponse? error)
