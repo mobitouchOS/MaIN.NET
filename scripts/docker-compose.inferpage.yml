@@ -1,0 +1,52 @@
+services:
+  inferpage:
+    build:
+      context: ../src
+      dockerfile: Dockerfile.inferpage
+      target: ${INFERPAGE_TARGET:-runtime-cpu}
+    container_name: inferpage
+    restart: unless-stopped
+    ports:
+      - "5555:5555"
+      - "11434:11434"  # only used when INFERPAGE_TARGET=runtime-ollama-bundled
+    environment:
+      # Required for every backend -- see note above.
+      model: ${MODEL_NAME:?MODEL_NAME must be set (a registry id, a cloud model id, or a custom local name paired with MODEL_URL)}
+      # Only meaningful for backend=self with a model name not already in the registry.
+      modelUrl: ${MODEL_URL:-}
+      # self (default) | openai | gemini | deepseek | groqcloud | anthropic | xai | ollama
+      backend: ${BACKEND:-self}
+      MaIN__ApiKey: ${MAIN_API_KEY:-}
+      # Cloud provider keys -- set only the one matching `backend`, per LLMApiRegistry's exact env var names.
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      XAI_API_KEY: ${XAI_API_KEY:-}
+      OLLAMA_API_KEY: ${OLLAMA_API_KEY:-}
+      # MaIN__OllamaBaseUrl is deliberately NOT set here. src/Dockerfile.inferpage already bakes in
+      # the right default per target (http://host.docker.internal:11434 for runtime-ollama,
+      # http://localhost:11434 for runtime-ollama-bundled) via its own ENV instructions. Compose
+      # environment values always override an image's ENV default -- even an empty string from an
+      # unset ${VAR:-} -- so defining this key here with a blank fallback would silently break both
+      # Ollama targets' working defaults. Only set it if you need a non-default Ollama location,
+      # e.g.: `OLLAMA_BASE_URL=http://my-ollama-host:11434 docker compose ... run -e MaIN__OllamaBaseUrl=$OLLAMA_BASE_URL inferpage`
+      # or via a `docker-compose.override.yml`.
+    volumes:
+      - inferpage-models:/app/Models
+      - inferpage-dataprotection-keys:/app/DataProtection-Keys
+      - inferpage-ollama-data:/root/.ollama  # only populated when using an ollama-bundled target
+    # Uncomment to enable NVIDIA GPU pass-through (also set INFERPAGE_TARGET=runtime-cuda):
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+volumes:
+  inferpage-models:
+  inferpage-dataprotection-keys:
+  inferpage-ollama-data:

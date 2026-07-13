@@ -18,6 +18,29 @@ public static class Utils
 
     public static string DefaultModelsPath => System.IO.Path.Combine(Directory.GetCurrentDirectory(), "models");
 
+    /// <summary>
+    /// Turns an arbitrary model name (used as a registry id when paired with modelUrl)
+    /// into a safe .gguf filename for the models directory.
+    /// </summary>
+    public static string SanitizeModelFileName(string? model)
+    {
+        if (string.IsNullOrWhiteSpace(model))
+        {
+            return "custom-model.gguf";
+        }
+
+        var invalidChars = System.IO.Path.GetInvalidFileNameChars();
+        var sanitized = new string(model.Select(c => invalidChars.Contains(c) ? '_' : c).ToArray()).Trim();
+        if (string.IsNullOrEmpty(sanitized))
+        {
+            sanitized = "custom-model";
+        }
+
+        return sanitized.EndsWith(".gguf", StringComparison.OrdinalIgnoreCase)
+            ? sanitized
+            : sanitized + ".gguf";
+    }
+
     // Manual capability overrides for unregistered models (set from Settings UI)
     public static bool? ManualVision { get; set; }
     public static bool? ManualReasoning { get; set; }

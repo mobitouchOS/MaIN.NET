@@ -69,6 +69,7 @@ public static class ServiceConstants
         public const string ToolCallsProperty = "ToolCalls";
         public const string ToolCallIdProperty = "ToolCallId";
         public const string ToolNameProperty = "ToolName";
+        public const string ClientSideToolExecutionProperty = "ClientSideToolExecution";
     }
 
     public static class Defaults

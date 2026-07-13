@@ -234,6 +234,24 @@ public sealed class AnthropicService(
 
             conversation.Add(new ChatMessage(ServiceConstants.Roles.Assistant, assistantContent));
 
+            if (chat.Properties.CheckProperty(ServiceConstants.Properties.ClientSideToolExecutionProperty))
+            {
+                foreach (var toolUse in currentToolUses)
+                {
+                    if (options.ToolCallback is not null)
+                    {
+                        await options.ToolCallback.Invoke(new ToolInvocation()
+                        {
+                            ToolName = toolUse.Name,
+                            Arguments = toolUse.Input.ToString() ?? string.Empty,
+                            Done = false
+                        });
+                    }
+                }
+
+                break;
+            }
+
             var toolResults = new List<object>();
             foreach (var toolUse in currentToolUses)
             {
@@ -256,19 +274,25 @@ public sealed class AnthropicService(
                 try
                 {
                     var inputJson = JsonSerializer.Serialize(toolUse.Input);
-                    options.ToolCallback?.Invoke(new ToolInvocation()
+                    if (options.ToolCallback is not null)
                     {
-                        ToolName = toolUse.Name,
-                        Arguments = toolUse.Input.ToString() ?? string.Empty,
-                        Done = false
-                    });
+                        await options.ToolCallback.Invoke(new ToolInvocation()
+                        {
+                            ToolName = toolUse.Name,
+                            Arguments = toolUse.Input.ToString() ?? string.Empty,
+                            Done = false
+                        });
+                    }
                     var toolResult = await executor(inputJson);
-                    options.ToolCallback?.Invoke(new ToolInvocation()
+                    if (options.ToolCallback is not null)
                     {
-                        ToolName = toolUse.Name,
-                        Arguments = toolUse.Input.ToString() ?? string.Empty,
-                        Done = true
-                    });
+                        await options.ToolCallback.Invoke(new ToolInvocation()
+                        {
+                            ToolName = toolUse.Name,
+                            Arguments = toolUse.Input.ToString() ?? string.Empty,
+                            Done = true
+                        });
+                    }
 
                     toolResults.Add(new
                     {

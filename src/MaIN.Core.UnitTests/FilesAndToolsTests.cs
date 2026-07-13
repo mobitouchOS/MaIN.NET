@@ -2,6 +2,7 @@ using MaIN.Core.Hub.Contexts;
 using MaIN.Core.Hub.Utils;
 using MaIN.Domain.Configuration;
 using MaIN.Domain.Entities;
+using MaIN.Domain.Entities.Tools;
 using MaIN.Domain.Models;
 using MaIN.Domain.Models.Abstract;
 using MaIN.Services.Services.Abstract;
@@ -52,9 +53,10 @@ public class FilesAndToolsTests
                 It.IsAny<bool>(),
                 It.IsAny<bool>(),
                 It.IsAny<Func<LLMTokenValue?, Task>>(),
-                It.IsAny<CancellationToken>()))
-            .Callback<Chat, bool, bool, Func<LLMTokenValue?, Task>?, CancellationToken>(
-                (chat, _, _, _, _) => _sentChat = chat)
+                It.IsAny<CancellationToken>(),
+                It.IsAny<Func<ToolInvocation, Task>?>()))
+            .Callback<Chat, bool, bool, Func<LLMTokenValue?, Task>?, CancellationToken, Func<ToolInvocation, Task>?>(
+                (chat, _, _, _, _, _) => _sentChat = chat)
             .ReturnsAsync(CreateChatResult());
     }
 

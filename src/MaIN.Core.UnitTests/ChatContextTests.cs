@@ -1,9 +1,11 @@
 using MaIN.Core.Hub.Contexts;
 using MaIN.Domain.Configuration;
 using MaIN.Domain.Entities;
+using MaIN.Domain.Models;
 using MaIN.Domain.Models.Abstract;
 using MaIN.Services.Services.Abstract;
 using MaIN.Services.Services.Models;
+using MaIN.Services.Constants;
 using Moq;
 using FileInfo = MaIN.Domain.Entities.FileInfo;
 
@@ -103,7 +105,8 @@ public class ChatContextTests
                 It.IsAny<bool>(),
                 It.IsAny<bool>(),
                 null,
-                It.IsAny<CancellationToken>()))
+                It.IsAny<CancellationToken>(),
+                null))
             .ReturnsAsync(chatResult);
 
         _chatContext.WithMessage("User message");
@@ -119,7 +122,8 @@ public class ChatContextTests
                 false,
                 false,
                 null,
-                It.IsAny<CancellationToken>()),
+                It.IsAny<CancellationToken>(),
+                null),
             Times.Once);
         Assert.Equal(chatResult, result);
     }
@@ -153,7 +157,78 @@ public class ChatContextTests
                 It.IsAny<bool>(),
                 It.IsAny<bool>(),
                 null,
-                It.IsAny<CancellationToken>()),
+                It.IsAny<CancellationToken>(),
+                null),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task CompleteAsync_ShouldPassToolCallbackThrough()
+    {
+        // Arrange
+        var chatResult = new ChatResult()
+        {
+            Model = "test-model",
+            Message = new Message
+            {
+                Role = "Assistant",
+                Content = "test-message",
+                Type = MessageType.LocalLLM
+            }
+        };
+
+        Func<MaIN.Domain.Entities.Tools.ToolInvocation, Task>? capturedCallback = null;
+
+        _mockChatService
+            .Setup(s => s.Completions(
+                It.IsAny<Chat>(),
+                It.IsAny<bool>(),
+                It.IsAny<bool>(),
+                null,
+                It.IsAny<CancellationToken>(),
+                It.IsAny<Func<MaIN.Domain.Entities.Tools.ToolInvocation, Task>?>()))
+            .Callback<Chat, bool, bool, Func<LLMTokenValue?, Task>?, CancellationToken, Func<MaIN.Domain.Entities.Tools.ToolInvocation, Task>?>(
+                (_, _, _, _, _, toolCallback) => capturedCallback = toolCallback)
+            .ReturnsAsync(chatResult);
+
+        _chatContext.WithModel(_testModelId).WithMessage("User message");
+
+        var receivedInvocations = new List<MaIN.Domain.Entities.Tools.ToolInvocation>();
+        Task MyToolCallback(MaIN.Domain.Entities.Tools.ToolInvocation invocation)
+        {
+            receivedInvocations.Add(invocation);
+            return Task.CompletedTask;
+        }
+
+        // Act
+        await _chatContext.CompleteAsync(toolCallback: MyToolCallback);
+        Assert.NotNull(capturedCallback);
+        // Invoke whatever delegate actually reached IChatService.Completions and confirm it's
+        // the same callback (proven via its side effect, not delegate reference/object equality,
+        // which is unreliable for local-function-to-delegate conversions).
+        await capturedCallback!(new MaIN.Domain.Entities.Tools.ToolInvocation { ToolName = "test_tool", Arguments = "{}", Done = false });
+
+        // Assert
+        Assert.Single(receivedInvocations);
+        Assert.Equal("test_tool", receivedInvocations[0].ToolName);
+    }
+
+    [Fact]
+    public async Task WithClientSideToolExecution_ShouldSetProperty()
+    {
+        await _chatContext.WithModel(_testModelId)
+            .WithMessage("User message")
+            .WithClientSideToolExecution(true)
+            .CompleteAsync();
+
+        _mockChatService.Verify(s =>
+            s.Completions(
+                It.Is<Chat>(c => c.Properties.ContainsKey(ServiceConstants.Properties.ClientSideToolExecutionProperty)),
+                It.IsAny<bool>(),
+                It.IsAny<bool>(),
+                null,
+                It.IsAny<CancellationToken>(),
+                null),
             Times.Once);
     }
 }

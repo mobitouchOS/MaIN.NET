@@ -6,6 +6,7 @@
 @using MaIN.Infrastructure.Models
 @inject SettingsService SettingsStorage
 @inject MaINSettings MaINSettings
+@inject Microsoft.Extensions.Configuration.IConfiguration Configuration
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 
 <link rel="stylesheet" href="settings.css">
@@ -247,6 +248,23 @@
                     <span class="api-key-hint">Multimodal projector file (must be in the models folder)</span>
                 </div>
             }
+
+            <div class="settings-field">
+                <label class="settings-label">OpenAI-Compatible API Key</label>
+                <div class="api-key-row">
+                    @{
+                        var configuredKey = Configuration["MaIN:ApiKey"] ?? Environment.GetEnvironmentVariable("MaIN__ApiKey");
+                        var isConfigured = !string.IsNullOrWhiteSpace(configuredKey);
+                    }
+                    <span class="api-key-hint" style="flex: 1;">
+                        Status: <strong>@(isConfigured ? "Configured (Secured via server environment/configuration)" : "Not configured (Unauthenticated access enabled)")</strong>
+                    </span>
+                </div>
+                <span class="api-key-hint">
+                    Required as a Bearer token by external clients calling this instance's
+                    <code>/v1/chat/completions</code> and <code>/v1/models</code> endpoints. Configure <code>MaIN__ApiKey</code> environment variable or <code>MaIN:ApiKey</code> in server settings to secure these endpoints.
+                </span>
+            </div>
         </div>
 
         <div class="settings-footer">
@@ -281,6 +299,7 @@
     private string? _apiKeyInput;
     private string? _savedKeyPreview;
     private bool _showApiKey;
+
 
     // Vertex AI auth fields
     private string? _vertexProjectId;
@@ -486,6 +505,7 @@
 
         if (_selectedBackend != null)
             await LoadApiKeyPreview();
+
     }
 
     private async Task OnBackendChanged()

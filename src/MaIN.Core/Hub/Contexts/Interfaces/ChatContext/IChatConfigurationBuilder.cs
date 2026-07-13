@@ -27,6 +27,15 @@ public interface IChatConfigurationBuilder : IChatActions
     IChatConfigurationBuilder WithTools(ToolsConfiguration toolsConfiguration);
 
     /// <summary>
+    /// Configures the chat session to stop immediately when the model emits a tool call,
+    /// returning the requested tool calls to the caller without executing them server-side.
+    /// Useful for OpenAI-compatible API endpoints or clients that execute tools locally.
+    /// </summary>
+    /// <param name="enabled">True to enable client-side tool execution mode; false for default server-side loop.</param>
+    /// <returns>The context instance implementing <see cref="IChatConfigurationBuilder"/> for method chaining.</returns>
+    IChatConfigurationBuilder WithClientSideToolExecution(bool enabled = true);
+
+    /// <summary>
     /// Sets the memory parameters for the chat session, allowing you to customize how the AI accesses and
     /// uses its memory for generating responses. Memory parameters influence aspects such as context size, memory search depth,
     /// and token allocation for responses.
@@ -95,6 +104,8 @@ public interface IChatConfigurationBuilder : IChatActions
     /// <param name="translate">A flag indicating whether the response should be translated. Default is false.</param>
     /// <param name="interactive">A flag indicating whether the chat session should be interactive. Default is false.</param>
     /// <param name="changeOfValue">An optional callback invoked whenever a new token or update is received during streaming.</param>
+    /// <param name="cancellationToken">A cancellation token that can be used by other objects or threads to receive notice of cancellation.</param>
+    /// <param name="toolCallback">An optional callback invoked when the model requests a tool call, before it executes.</param>
     /// <returns>A <see cref="ChatResult"/> object containing the result of the completed chat session.</returns>
-    Task<ChatResult> CompleteAsync(bool translate = false, bool interactive = false, Func<LLMTokenValue?, Task>? changeOfValue = null, CancellationToken cancellationToken = default);
+    Task<ChatResult> CompleteAsync(bool translate = false, bool interactive = false, Func<LLMTokenValue?, Task>? changeOfValue = null, CancellationToken cancellationToken = default, Func<ToolInvocation, Task>? toolCallback = null);
 }

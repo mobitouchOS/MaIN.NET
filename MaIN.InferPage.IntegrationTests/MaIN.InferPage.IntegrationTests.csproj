@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+
+        <IsPackable>false</IsPackable>
+        <IsTestProject>true</IsTestProject>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="coverlet.collector" Version="6.0.4">
+          <PrivateAssets>all</PrivateAssets>
+          <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
+        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.0.1" />
+        <PackageReference Include="xunit" Version="2.9.3" />
+        <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5">
+          <PrivateAssets>all</PrivateAssets>
+          <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
+    </ItemGroup>
+
+    <ItemGroup>
+      <Using Include="Xunit"/>
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\src\MaIN.InferPage\MaIN.InferPage.csproj" />
+    </ItemGroup>
+
+    <!--
+      MaIN.InferPage's appsettings*.json (CopyToOutputDirectory content) propagates transitively
+      into this test project's output directory via the ProjectReference above. Its Kestrel
+      EndPoints:Http:Url is a fixed port (5555), which Kestrel prioritizes over the dynamic
+      urls argument the test base class passes on the command line, causing "address already
+      in use" failures across test runs. Delete the copies post build so each test's
+      WebApplication binds to an OS assigned ephemeral port as intended.
+    -->
+    <Target Name="RemoveInheritedInferPageAppSettings" AfterTargets="Build;Publish">
+      <ItemGroup>
+        <_StaleInferPageAppSettings Include="$(OutDir)appsettings*.json" />
+      </ItemGroup>
+      <Delete Files="@(_StaleInferPageAppSettings)" ContinueOnError="true" />
+    </Target>
+
+</Project>

@@ -3,11 +3,38 @@ using MaIN.Core.Hub;
 using MaIN.Domain.Configuration;
 using MaIN.Domain.Models.Concrete;
 using MaIN.Domain.Models.Abstract;
+using MaIN.InferPage.Endpoints;
 using MaIN.InferPage.Services;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.FluentUI.AspNetCore.Components;
 using MaIN.InferPage.Components;
+using Scalar.AspNetCore;
 using Utils = MaIN.InferPage.Utils;
+
+// Reads --flagName from the raw CLI args first (unambiguous — nothing accidentally passes this
+// as a process argument), falling back to a plain environment variable. envVarName is
+// deliberately a different string than flagName for "path": builder.Configuration["path"] would
+// also match the OS's PATH environment variable (case-insensitive matching), silently feeding
+// the system search path into Directory.CreateDirectory(...) below. Environment.GetEnvironmentVariable
+// only matches the exact name given, so "modelPath" cannot collide with "PATH".
+static string? GetExplicitCliOrEnvValue(string[] args, string flagName, string envVarName)
+{
+    var equalsPrefix = $"--{flagName}=";
+    for (var i = 0; i < args.Length; i++)
+    {
+        if (args[i].StartsWith(equalsPrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return args[i][equalsPrefix.Length..];
+        }
+
+        if (string.Equals(args[i], $"--{flagName}", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
+        {
+            return args[i + 1];
+        }
+    }
+
+    return Environment.GetEnvironmentVariable(envVarName);
+}
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
@@ -19,6 +46,7 @@ builder.Services.AddRazorComponents()
 builder.Services.AddFluentUIComponents();
 builder.Services.AddScoped<SettingsService>();
 builder.Services.AddScoped<SettingsStateService>();
+builder.Services.AddOpenApi();
 
 if (!builder.Environment.IsDevelopment())
 {
@@ -32,8 +60,9 @@ if (!builder.Environment.IsDevelopment())
 try
 {
     var modelArg = builder.Configuration["model"];
-    var modelPathArg = builder.Configuration["path"];
+    var modelPathArg = GetExplicitCliOrEnvValue(args, "path", "modelPath");
     var backendArg = builder.Configuration["backend"];
+    var modelUrlArg = builder.Configuration["modelUrl"];
 
     bool hasCommandLineConfig = backendArg != null || modelArg != null;
 
@@ -92,6 +121,27 @@ try
                     Utils.Path = defaultPath;
                     Console.WriteLine($"No --path provided. Using default models directory: {defaultPath}");
                 }
+                else
+                {
+                    var modelsDirectory = modelPathArg.EndsWith(".gguf", StringComparison.OrdinalIgnoreCase)
+                        ? System.IO.Path.GetDirectoryName(modelPathArg) ?? Utils.DefaultModelsPath
+                        : modelPathArg;
+                    Directory.CreateDirectory(modelsDirectory);
+                    Environment.SetEnvironmentVariable("MaIN_ModelsPath", modelsDirectory);
+                }
+
+                if (!ModelRegistry.Exists(modelArg) && !string.IsNullOrEmpty(modelUrlArg))
+                {
+                    var fileName = Utils.SanitizeModelFileName(modelArg);
+                    var downloadUrl = new Uri(modelUrlArg);
+                    ModelRegistry.RegisterOrReplace(new GenericLocalModel(
+                        FileName: fileName,
+                        Id: modelArg,
+                        DownloadUrl: downloadUrl));
+                    // Log only scheme+host+path -- modelUrl may carry a SAS/presigned token in its
+                    // query string, which must never land in console/container logs.
+                    Console.WriteLine($"Registered custom model '{modelArg}' for download from {downloadUrl.GetLeftPart(UriPartial.Path)}");
+                }
             }
         }
         else
@@ -111,9 +161,12 @@ catch (Exception ex)
     return;
 }
 
-// For Self backend CLI mode, validate model before registering
+// For Self backend CLI mode, validate model before registering.
+// Utils.Path is always set by this point for Self + a model arg (see above), so the previous
+// "Utils.Path == null" clause never actually triggered this guard — dropped so an unrecognized
+// model name (with no modelUrl to register it) is now caught here instead of failing later.
 if (!Utils.NeedsConfiguration && Utils.BackendType == BackendType.Self
-    && Utils.Path == null && !ModelRegistry.Exists(Utils.Model!))
+    && !ModelRegistry.Exists(Utils.Model!))
 {
     Console.WriteLine($"Model: {Utils.Model} is not supported");
     Environment.Exit(0);
@@ -140,7 +193,37 @@ app.UseStaticFiles();
 app.UseAntiforgery();
 app.Services.UseMaIN();
 AIHub.Extensions.DisableLLamaLogs();
+
+if (!Utils.NeedsConfiguration && Utils.BackendType == BackendType.Self && !string.IsNullOrEmpty(Utils.Model))
+{
+    var initialModel = Utils.Model;
+    _ = Task.Run(async () =>
+    {
+        try
+        {
+            if (!AIHub.Model().Exists(initialModel))
+            {
+                Console.WriteLine($"Downloading model '{initialModel}'...");
+                await AIHub.Model().EnsureDownloadedAsync(initialModel);
+                Console.WriteLine($"Model '{initialModel}' is ready.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to download model '{initialModel}': {ex.Message}");
+        }
+    });
+}
+
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
+app.MapOpenAiCompatEndpoints();
+
+// Interactive API docs for the OpenAI-compatible endpoint (/scalar/v1), backed by the
+// standard ASP.NET Core OpenAPI document at /openapi/v1.json -- exposed unconditionally
+// (not just in Development) since self-hosted InferPage instances are commonly run in
+// Docker/Production and this is the primary way an operator tests the API by hand.
+app.MapOpenApi();
+app.MapScalarApiReference();
 
 app.Run();

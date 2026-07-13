@@ -73,6 +73,19 @@ public sealed class ChatContext : IChatBuilderEntryPoint, IChatMessageBuilder, I
         return this;
     }
 
+    public IChatConfigurationBuilder WithClientSideToolExecution(bool enabled = true)
+    {
+        if (enabled)
+        {
+            _chat.Properties.AddProperty(ServiceConstants.Properties.ClientSideToolExecutionProperty);
+        }
+        else
+        {
+            _chat.Properties.Remove(ServiceConstants.Properties.ClientSideToolExecutionProperty);
+        }
+        return this;
+    }
+
     public IChatConfigurationBuilder WithMemoryParams(MemoryParams memoryParams)
     {
         _chat.MemoryParams = memoryParams;
@@ -179,7 +192,8 @@ public sealed class ChatContext : IChatBuilderEntryPoint, IChatMessageBuilder, I
         bool translate = false, // Move to WithTranslate
         bool interactive = false, // Move to WithInteractive
         Func<LLMTokenValue?, Task>? changeOfValue = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Func<ToolInvocation, Task>? toolCallback = null)
     {
         if (string.IsNullOrEmpty(_chat.ModelId))
         {
@@ -191,7 +205,7 @@ public sealed class ChatContext : IChatBuilderEntryPoint, IChatMessageBuilder, I
             throw new EmptyChatException(_chat.Id);
         }
 
-        if (_ensureModelDownloaded)
+        if (_ensureModelDownloaded && ModelRegistry.TryGetById(_chat.ModelId, out var model) && model is LocalModel)
         {
             await _modelContext.EnsureDownloadedAsync(_chat.ModelId, cancellationToken);
         }
@@ -212,7 +226,8 @@ public sealed class ChatContext : IChatBuilderEntryPoint, IChatMessageBuilder, I
             translate,
             interactive,
             changeOfValue,
-            cancellationToken);
+            cancellationToken,
+            toolCallback);
         _files = [];
         return result;
     }
