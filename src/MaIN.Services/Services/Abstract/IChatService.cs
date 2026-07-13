@@ -13,8 +13,8 @@ public interface IChatService
         bool translatePrompt = false,
         bool interactiveUpdates = false,
         Func<LLMTokenValue?, Task>? changeOfValue = null,
-        Func<ToolInvocation, Task>? toolCallback = null,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        Func<ToolInvocation, Task>? toolCallback = null);
     Task Delete(string id);
     Task<Chat> GetById(string id);
     Task<List<Chat>> GetAll();

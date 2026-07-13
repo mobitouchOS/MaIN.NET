@@ -128,7 +128,7 @@ public static class ChatHelper
                 {
                     var chatMessage = new ChatMessage(role, msg.Content);
 
-                    if (msg.Tool && msg.Properties.ContainsKey(ServiceConstants.Properties.ToolCallsProperty))
+                    if (msg.Properties.ContainsKey(ServiceConstants.Properties.ToolCallsProperty))
                     {
                         var toolCallsJson = msg.Properties[ServiceConstants.Properties.ToolCallsProperty];
                         chatMessage.ToolCalls = JsonSerializer.Deserialize<List<ToolCall>>(toolCallsJson);

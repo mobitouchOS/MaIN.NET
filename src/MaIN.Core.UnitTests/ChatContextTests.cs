@@ -5,6 +5,7 @@ using MaIN.Domain.Models;
 using MaIN.Domain.Models.Abstract;
 using MaIN.Services.Services.Abstract;
 using MaIN.Services.Services.Models;
+using MaIN.Services.Constants;
 using Moq;
 using FileInfo = MaIN.Domain.Entities.FileInfo;
 
@@ -104,8 +105,8 @@ public class ChatContextTests
                 It.IsAny<bool>(),
                 It.IsAny<bool>(),
                 null,
-                null,
-                It.IsAny<CancellationToken>()))
+                It.IsAny<CancellationToken>(),
+                null))
             .ReturnsAsync(chatResult);
 
         _chatContext.WithMessage("User message");
@@ -121,8 +122,8 @@ public class ChatContextTests
                 false,
                 false,
                 null,
-                null,
-                It.IsAny<CancellationToken>()),
+                It.IsAny<CancellationToken>(),
+                null),
             Times.Once);
         Assert.Equal(chatResult, result);
     }
@@ -156,8 +157,8 @@ public class ChatContextTests
                 It.IsAny<bool>(),
                 It.IsAny<bool>(),
                 null,
-                null,
-                It.IsAny<CancellationToken>()),
+                It.IsAny<CancellationToken>(),
+                null),
             Times.Once);
     }
 
@@ -184,10 +185,10 @@ public class ChatContextTests
                 It.IsAny<bool>(),
                 It.IsAny<bool>(),
                 null,
-                It.IsAny<Func<MaIN.Domain.Entities.Tools.ToolInvocation, Task>?>(),
-                It.IsAny<CancellationToken>()))
-            .Callback<Chat, bool, bool, Func<LLMTokenValue?, Task>?, Func<MaIN.Domain.Entities.Tools.ToolInvocation, Task>?, CancellationToken>(
-                (_, _, _, _, toolCallback, _) => capturedCallback = toolCallback)
+                It.IsAny<CancellationToken>(),
+                It.IsAny<Func<MaIN.Domain.Entities.Tools.ToolInvocation, Task>?>()))
+            .Callback<Chat, bool, bool, Func<LLMTokenValue?, Task>?, CancellationToken, Func<MaIN.Domain.Entities.Tools.ToolInvocation, Task>?>(
+                (_, _, _, _, _, toolCallback) => capturedCallback = toolCallback)
             .ReturnsAsync(chatResult);
 
         _chatContext.WithModel(_testModelId).WithMessage("User message");
@@ -210,5 +211,24 @@ public class ChatContextTests
         // Assert
         Assert.Single(receivedInvocations);
         Assert.Equal("test_tool", receivedInvocations[0].ToolName);
+    }
+
+    [Fact]
+    public async Task WithClientSideToolExecution_ShouldSetProperty()
+    {
+        await _chatContext.WithModel(_testModelId)
+            .WithMessage("User message")
+            .WithClientSideToolExecution(true)
+            .CompleteAsync();
+
+        _mockChatService.Verify(s =>
+            s.Completions(
+                It.Is<Chat>(c => c.Properties.ContainsKey(ServiceConstants.Properties.ClientSideToolExecutionProperty)),
+                It.IsAny<bool>(),
+                It.IsAny<bool>(),
+                null,
+                It.IsAny<CancellationToken>(),
+                null),
+            Times.Once);
     }
 }

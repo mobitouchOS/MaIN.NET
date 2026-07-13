@@ -127,4 +127,57 @@ public class OpenAiMessageMapperTests
         Assert.Equal("get_weather", dtos[0].Function.Name);
         Assert.Equal("{\"city\":\"NYC\"}", dtos[0].Function.Arguments);
     }
+
+    [Fact]
+    public void ToMainMessages_HandlesNullRoleGracefully()
+    {
+        var incoming = new List<ChatCompletionRequestMessage>
+        {
+            new() { Role = null! }
+        };
+
+        var exception = Record.Exception(() => OpenAiMessageMapper.ToMainMessages(incoming));
+
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public void ToMainMessages_MapsAssistantToolCallsAndToolResultMessages()
+    {
+        var incoming = new List<ChatCompletionRequestMessage>
+        {
+            new()
+            {
+                Role = "assistant",
+                Content = JsonSerializer.SerializeToElement("Checking weather..."),
+                ToolCalls = new List<ChatCompletionToolCallDto>
+                {
+                    new()
+                    {
+                        Id = "call_abc",
+                        Type = "function",
+                        Function = new ChatCompletionFunctionCallDto { Name = "get_weather", Arguments = "{\"city\":\"Paris\"}" }
+                    }
+                }
+            },
+            new()
+            {
+                Role = "tool",
+                ToolCallId = "call_abc",
+                Name = "get_weather",
+                Content = JsonSerializer.SerializeToElement("22C and sunny")
+            }
+        };
+
+        var (_, messages) = OpenAiMessageMapper.ToMainMessages(incoming);
+
+        Assert.Equal(2, messages.Count);
+        Assert.Equal("Assistant", messages[0].Role);
+        Assert.True(messages[0].Properties.ContainsKey(ServiceConstants.Properties.ToolCallsProperty));
+
+        Assert.Equal(ServiceConstants.Roles.Tool, messages[1].Role);
+        Assert.True(messages[1].Tool);
+        Assert.Equal("call_abc", messages[1].Properties[ServiceConstants.Properties.ToolCallIdProperty]);
+        Assert.Equal("get_weather", messages[1].Properties[ServiceConstants.Properties.ToolNameProperty]);
+    }
 }

@@ -32,8 +32,8 @@ public class ChatService(
         bool translate = false,
         bool interactiveUpdates = false,
         Func<LLMTokenValue?, Task>? changeOfValue = null,
-        Func<ToolInvocation, Task>? toolCallback = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Func<ToolInvocation, Task>? toolCallback = null)
     {
         if (!ModelRegistry.TryGetById(chat.ModelId, out var model))
         {

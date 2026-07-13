@@ -227,6 +227,21 @@ public abstract class OpenAiCompatibleService(
                 ToolCalls = currentToolCalls
             });
 
+            if (chat.Properties.CheckProperty(ServiceConstants.Properties.ClientSideToolExecutionProperty))
+            {
+                foreach (var toolCall in currentToolCalls)
+                {
+                    options.ToolCallback?.Invoke(new ToolInvocation()
+                    {
+                        ToolName = toolCall.Function.Name,
+                        Arguments = toolCall.Function.Arguments,
+                        Done = false
+                    });
+                }
+
+                break;
+            }
+
             foreach (var toolCall in currentToolCalls)
             {
                 if (chat.Properties.CheckProperty(ServiceConstants.Properties.AgentIdProperty))

@@ -73,7 +73,7 @@ public static class OpenAiCompatEndpoints
             // IChatConfigurationBuilder that WithMessages(...) unlocks -- so WithMessages must be
             // called before WithSystemPrompt, even though WithSystemPrompt always inserts at index 0
             // regardless of call order.
-            var configuredContext = AIHub.Chat().WithModel(Utils.Model).WithMessages(messages);
+            var configuredContext = AIHub.Chat().WithModel(Utils.Model).EnsureModelDownloaded().WithMessages(messages);
             if (!string.IsNullOrEmpty(systemPrompt))
             {
                 configuredContext.WithSystemPrompt(systemPrompt);
@@ -284,7 +284,7 @@ public static class OpenAiCompatEndpoints
             toolsBuilder.WithToolChoice(request.ToolChoice);
         }
 
-        context.WithTools(toolsBuilder.Build());
+        context.WithTools(toolsBuilder.Build()).WithClientSideToolExecution(true);
 
         var invocations = new List<ToolInvocation>();
         ChatResult result;

@@ -48,7 +48,7 @@ public static class OpenAiMessageMapper
 
         foreach (var m in incoming)
         {
-            var role = m.Role.ToLowerInvariant();
+            var role = m.Role?.ToLowerInvariant() ?? string.Empty;
 
             if (role == "system")
             {

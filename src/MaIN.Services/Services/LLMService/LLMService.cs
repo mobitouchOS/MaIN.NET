@@ -753,6 +753,24 @@ public class LLMService : ILLMService
             var toolCalls = parseResult.ToolCalls!;
             responseMessage.Properties[ServiceConstants.Properties.ToolCallsProperty] = JsonSerializer.Serialize(toolCalls);
 
+            if (chat.Properties.CheckProperty(ServiceConstants.Properties.ClientSideToolExecutionProperty))
+            {
+                foreach (var toolCall in toolCalls)
+                {
+                    if (requestOptions.ToolCallback is not null)
+                    {
+                        await requestOptions.ToolCallback.Invoke(new ToolInvocation
+                        {
+                            ToolName = toolCall.Function.Name,
+                            Arguments = toolCall.Function.Arguments,
+                            Done = false
+                        });
+                    }
+                }
+
+                break;
+            }
+
             foreach (var toolCall in toolCalls)
             {
                 if (chat.Properties.CheckProperty(ServiceConstants.Properties.AgentIdProperty))

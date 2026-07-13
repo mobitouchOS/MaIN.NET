@@ -22,8 +22,13 @@ public static class Utils
     /// Turns an arbitrary model name (used as a registry id when paired with modelUrl)
     /// into a safe .gguf filename for the models directory.
     /// </summary>
-    public static string SanitizeModelFileName(string model)
+    public static string SanitizeModelFileName(string? model)
     {
+        if (string.IsNullOrWhiteSpace(model))
+        {
+            return "custom-model.gguf";
+        }
+
         var invalidChars = System.IO.Path.GetInvalidFileNameChars();
         var sanitized = new string(model.Select(c => invalidChars.Contains(c) ? '_' : c).ToArray()).Trim();
         if (string.IsNullOrEmpty(sanitized))

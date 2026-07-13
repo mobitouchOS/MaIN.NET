@@ -34,4 +34,12 @@ public class UtilsSanitizeModelFileNameTests
 
         Assert.Equal("custom-model.gguf", result);
     }
+
+    [Fact]
+    public void SanitizeModelFileName_ReturnsDefaultName_WhenNull()
+    {
+        var result = Utils.SanitizeModelFileName(null);
+
+        Assert.Equal("custom-model.gguf", result);
+    }
 }

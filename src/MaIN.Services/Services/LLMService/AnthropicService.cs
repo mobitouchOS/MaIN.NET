@@ -234,6 +234,21 @@ public sealed class AnthropicService(
 
             conversation.Add(new ChatMessage(ServiceConstants.Roles.Assistant, assistantContent));
 
+            if (chat.Properties.CheckProperty(ServiceConstants.Properties.ClientSideToolExecutionProperty))
+            {
+                foreach (var toolUse in currentToolUses)
+                {
+                    options.ToolCallback?.Invoke(new ToolInvocation()
+                    {
+                        ToolName = toolUse.Name,
+                        Arguments = toolUse.Input.ToString() ?? string.Empty,
+                        Done = false
+                    });
+                }
+
+                break;
+            }
+
             var toolResults = new List<object>();
             foreach (var toolUse in currentToolUses)
             {

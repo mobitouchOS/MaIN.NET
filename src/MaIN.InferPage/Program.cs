@@ -196,12 +196,23 @@ AIHub.Extensions.DisableLLamaLogs();
 
 if (!Utils.NeedsConfiguration && Utils.BackendType == BackendType.Self && !string.IsNullOrEmpty(Utils.Model))
 {
-    if (!AIHub.Model().Exists(Utils.Model))
+    var initialModel = Utils.Model;
+    _ = Task.Run(async () =>
     {
-        Console.WriteLine($"Downloading model '{Utils.Model}'...");
-        await AIHub.Model().EnsureDownloadedAsync(Utils.Model);
-        Console.WriteLine($"Model '{Utils.Model}' is ready.");
-    }
+        try
+        {
+            if (!AIHub.Model().Exists(initialModel))
+            {
+                Console.WriteLine($"Downloading model '{initialModel}'...");
+                await AIHub.Model().EnsureDownloadedAsync(initialModel);
+                Console.WriteLine($"Model '{initialModel}' is ready.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to download model '{initialModel}': {ex.Message}");
+        }
+    });
 }
 
 app.MapRazorComponents<App>()
