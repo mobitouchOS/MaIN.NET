@@ -6,6 +6,7 @@
 @using MaIN.Infrastructure.Models
 @inject SettingsService SettingsStorage
 @inject MaINSettings MaINSettings
+@inject Microsoft.Extensions.Configuration.IConfiguration Configuration
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 
 <link rel="stylesheet" href="settings.css">
@@ -249,28 +250,19 @@
             }
 
             <div class="settings-field">
-                <label class="settings-label">OpenAI-Compatible API Key (optional)</label>
+                <label class="settings-label">OpenAI-Compatible API Key</label>
                 <div class="api-key-row">
-                    <FluentTextField @bind-Value="_openAiCompatApiKeyInput"
-                                     Placeholder="Leave blank to allow unauthenticated access"
-                                     TextFieldType="@(_showOpenAiCompatApiKey ? TextFieldType.Text : TextFieldType.Password)"
-                                     Style="flex: 1;" />
-                    <FluentButton Appearance="Appearance.Lightweight"
-                                  Style="--neutral-fill-stealth-rest: transparent; --neutral-fill-stealth-hover: rgba(128,128,128,0.15); --neutral-fill-stealth-active: rgba(128,128,128,0.25);"
-                                  OnClick="@(() => _showOpenAiCompatApiKey = !_showOpenAiCompatApiKey)"
-                                  IconStart="@(_showOpenAiCompatApiKey
-                                      ? new Icons.Regular.Size20.EyeOff()
-                                      : (Icon)new Icons.Regular.Size20.Eye())">
-                    </FluentButton>
+                    @{
+                        var configuredKey = Configuration["MaIN:ApiKey"] ?? Environment.GetEnvironmentVariable("MaIN__ApiKey");
+                        var isConfigured = !string.IsNullOrWhiteSpace(configuredKey);
+                    }
+                    <span class="api-key-hint" style="flex: 1;">
+                        Status: <strong>@(isConfigured ? "Configured (Secured via server environment/configuration)" : "Not configured (Unauthenticated access enabled)")</strong>
+                    </span>
                 </div>
-                @if (!string.IsNullOrEmpty(_openAiCompatSavedKeyPreview))
-                {
-                    <span class="api-key-hint">Saved: @_openAiCompatSavedKeyPreview</span>
-                }
                 <span class="api-key-hint">
                     Required as a Bearer token by external clients calling this instance's
-                    <code>/v1/chat/completions</code> and <code>/v1/models</code> endpoints. Leave blank
-                    to allow unauthenticated access on these routes.
+                    <code>/v1/chat/completions</code> and <code>/v1/models</code> endpoints. Configure <code>MaIN__ApiKey</code> environment variable or <code>MaIN:ApiKey</code> in server settings to secure these endpoints.
                 </span>
             </div>
         </div>
@@ -308,10 +300,6 @@
     private string? _savedKeyPreview;
     private bool _showApiKey;
 
-    private string? _openAiCompatApiKeyInput;
-    private string? _openAiCompatSavedKeyPreview;
-    private bool _showOpenAiCompatApiKey;
-    private const string OpenAiCompatApiKeyStorageKey = "OpenAiCompatEndpoint";
 
     // Vertex AI auth fields
     private string? _vertexProjectId;
@@ -518,8 +506,6 @@
         if (_selectedBackend != null)
             await LoadApiKeyPreview();
 
-        var savedOpenAiCompatKey = await SettingsStorage.GetApiKeyForBackendAsync(OpenAiCompatApiKeyStorageKey);
-        _openAiCompatSavedKeyPreview = string.IsNullOrEmpty(savedOpenAiCompatKey) ? null : MaskApiKey(savedOpenAiCompatKey);
     }
 
     private async Task OnBackendChanged()
@@ -819,21 +805,6 @@
             MaINSettings,
             apiKey,
             vertexAuth);
-
-        // OpenAI-compatible endpoint's own Bearer key -- independent of the chat backend's API key above.
-        // Blank input falls back to whatever was previously saved (matching the existing provider-key
-        // behavior elsewhere on this page, which never clears a saved key just because the field is empty).
-        string? openAiCompatApiKey;
-        if (!string.IsNullOrWhiteSpace(_openAiCompatApiKeyInput))
-        {
-            openAiCompatApiKey = _openAiCompatApiKeyInput;
-            await SettingsStorage.SaveApiKeyAsync(OpenAiCompatApiKeyStorageKey, openAiCompatApiKey);
-        }
-        else
-        {
-            openAiCompatApiKey = await SettingsStorage.GetApiKeyForBackendAsync(OpenAiCompatApiKeyStorageKey);
-        }
-        Environment.SetEnvironmentVariable("MaIN__ApiKey", openAiCompatApiKey);
 
         await OnSettingsApplied.InvokeAsync();
     }

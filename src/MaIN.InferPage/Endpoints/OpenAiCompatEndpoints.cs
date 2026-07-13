@@ -134,7 +134,8 @@ public static class OpenAiCompatEndpoints
 
     private static bool IsAuthorized(HttpRequest request, out OpenAiErrorResponse? error)
     {
-        var requiredApiKey = Environment.GetEnvironmentVariable("MaIN__ApiKey");
+        var configuration = request.HttpContext.RequestServices.GetService<IConfiguration>();
+        var requiredApiKey = configuration?["MaIN:ApiKey"] ?? Environment.GetEnvironmentVariable("MaIN__ApiKey");
         var header = request.Headers.Authorization.ToString();
         return OpenAiApiKeyAuth.IsAuthorized(string.IsNullOrEmpty(header) ? null : header, requiredApiKey, out error);
     }
@@ -290,10 +291,6 @@ public static class OpenAiCompatEndpoints
         ChatResult result;
         try
         {
-            // This callback must stay synchronous: the cloud adapters (OpenAiCompatibleService,
-            // AnthropicService) invoke ToolCallback without awaiting it, unlike the local LLMService
-            // path which does await it. Adding real async work here (I/O, further awaits) would race
-            // against -- or silently drop calls on -- those cloud backends.
             result = await context.CompleteAsync(
                 toolCallback: invocation =>
                 {

@@ -231,12 +231,15 @@ public abstract class OpenAiCompatibleService(
             {
                 foreach (var toolCall in currentToolCalls)
                 {
-                    options.ToolCallback?.Invoke(new ToolInvocation()
+                    if (options.ToolCallback is not null)
                     {
-                        ToolName = toolCall.Function.Name,
-                        Arguments = toolCall.Function.Arguments,
-                        Done = false
-                    });
+                        await options.ToolCallback.Invoke(new ToolInvocation()
+                        {
+                            ToolName = toolCall.Function.Name,
+                            Arguments = toolCall.Function.Arguments,
+                            Done = false
+                        });
+                    }
                 }
 
                 break;
@@ -264,19 +267,25 @@ public abstract class OpenAiCompatibleService(
 
                 try
                 {
-                    options.ToolCallback?.Invoke(new ToolInvocation()
+                    if (options.ToolCallback is not null)
                     {
-                        ToolName = toolCall.Function.Name,
-                        Arguments = toolCall.Function.Arguments,
-                        Done = false
-                    });
+                        await options.ToolCallback.Invoke(new ToolInvocation()
+                        {
+                            ToolName = toolCall.Function.Name,
+                            Arguments = toolCall.Function.Arguments,
+                            Done = false
+                        });
+                    }
                     var toolResult = await executor(toolCall.Function.Arguments);
-                    options.ToolCallback?.Invoke(new ToolInvocation()
+                    if (options.ToolCallback is not null)
                     {
-                        ToolName = toolCall.Function.Name,
-                        Arguments = toolCall.Function.Arguments,
-                        Done = true
-                    });
+                        await options.ToolCallback.Invoke(new ToolInvocation()
+                        {
+                            ToolName = toolCall.Function.Name,
+                            Arguments = toolCall.Function.Arguments,
+                            Done = true
+                        });
+                    }
                     var toolMessage = new ChatMessage(ServiceConstants.Roles.Tool, toolResult)
                     {
                         ToolCallId = toolCall.Id,
