@@ -21,8 +21,19 @@
       <dependency id="Microsoft.SemanticKernel.Connectors.Google" version="1.64.0-alpha" />
       <dependency id="Microsoft.Extensions.Http" version="10.0.1" />
       <dependency id="Microsoft.KernelMemory" version="0.98.250508.3" />
-      <dependency id="Tesseract" version="5.2.0" />
-      <dependency id="Tesseract.Data.English" version="4.0.0" />
+      <!-- OCR (PaddleOCR + OpenCvSharp), cross-platform replacement for Tesseract -->
+      <dependency id="Sdcb.PaddleOCR" version="3.3.1" />
+      <dependency id="Sdcb.PaddleInference" version="3.3.1" />
+      <dependency id="Sdcb.PaddleOCR.Models.Online" version="3.3.1" />
+      <dependency id="OpenCvSharp4" version="4.13.0.20260627" />
+      <dependency id="Sdcb.PaddleInference.runtime.win64.openblas" version="3.3.1.70" />
+      <dependency id="Sdcb.PaddleInference.runtime.linux-x64.openblas" version="3.3.1.70" />
+      <dependency id="Sdcb.PaddleInference.runtime.osx-arm64" version="3.3.1.70" />
+      <dependency id="Sdcb.PaddleInference.runtime.osx-x64" version="3.3.1.70" />
+      <dependency id="OpenCvSharp4.runtime.win" version="4.13.0.20260627" />
+      <dependency id="OpenCvSharp4.official.runtime.linux-x64" version="4.13.0.20260627" />
+      <dependency id="OpenCvSharp4.runtime.osx.arm64" version="4.13.0.20260627" />
+      <dependency id="OpenCvSharp4.runtime.osx.x64" version="4.13.0.20260627" />
     </dependencies>
   </metadata>
   <files>

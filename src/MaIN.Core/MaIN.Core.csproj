@@ -9,7 +9,6 @@
     <ItemGroup>
         <PackageReference Include="AsyncKeyedLock" Version="8.0.2" />
         <PackageReference Include="LLamaSharp.Backend.Cuda12" Version="0.27.0" />
-        <PackageReference Include="Tesseract.Data.English" Version="4.0.0" />
     </ItemGroup>
 
     <ItemGroup>
@@ -24,8 +23,4 @@
         <ProjectReference Include="..\MaIN.Infrastructure\MaIN.Infrastructure.csproj" />
     </ItemGroup>
 
-    <Target Name="link_deps" AfterTargets="AfterBuild" Condition="$([MSBuild]::IsOSPlatform('OSX'))">
-        <Exec Command="ln -sf /opt/homebrew/lib/libleptonica.dylib $(OutDir)x64/libleptonica-1.82.0.dylib" />
-        <Exec Command="ln -sf /opt/homebrew/lib/libtesseract.dylib $(OutDir)x64/libtesseract50.dylib" />
-    </Target>
 </Project>

@@ -1,5 +1,5 @@
 using Microsoft.KernelMemory.DataFormats;
-using Tesseract;
+using MaIN.Services.Services.PaddleOcr;
 
 namespace MaIN.Services.Services;
 
@@ -16,16 +16,8 @@ public class OcrWrapper : IOcrEngine
             await imageContent.CopyToAsync(memoryStream, cancellationToken);
             imageBytes = memoryStream.ToArray();
         }
-        
-        using var engine = new TesseractEngine(
-            Path.Combine(AppContext.BaseDirectory, "tessdata"),
-            "eng",
-            EngineMode.TesseractAndLstm);
-        
-        using var img = Pix.LoadFromMemory(imageBytes);
-        using var page = engine.Process(img);
 
-        return page.GetText();
+        return await PaddleOcrProvider.ExtractFromBytesAsync(imageBytes, cancellationToken);
     }
-    
+
 }
