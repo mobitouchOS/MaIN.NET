@@ -8,18 +8,19 @@ namespace MaIN.Services.Services.PaddleOcr;
 
 internal static class PaddleOcrProvider
 {
-    private static readonly object EngineLock = new();
+    private static readonly SemaphoreSlim EngineLock = new(1, 1);
     private static QueuedPaddleOcrAll? _engine;
 
-    private static QueuedPaddleOcrAll GetEngine()
+    private static async Task<QueuedPaddleOcrAll> GetEngineAsync(CancellationToken ct)
     {
         if (_engine is not null) return _engine;
 
-        lock (EngineLock)
+        await EngineLock.WaitAsync(ct);
+        try
         {
             if (_engine is not null) return _engine;
 
-            FullOcrModel model = OnlineFullModels.EnglishV4.DownloadAsync().GetAwaiter().GetResult();
+            FullOcrModel model = await OnlineFullModels.EnglishV4.DownloadAsync();
             var workers = Math.Max(1, Environment.ProcessorCount / 2);
             _engine = new QueuedPaddleOcrAll(
                 () => new PaddleOcrAll(model, PaddleDevice.Blas())
@@ -33,6 +34,10 @@ internal static class PaddleOcrProvider
                 boundedCapacity: 64);
             return _engine;
         }
+        finally
+        {
+            EngineLock.Release();
+        }
     }
 
     public static async Task<string> ExtractFromBytesAsync(byte[] bytes, CancellationToken ct = default)
@@ -43,7 +48,8 @@ internal static class PaddleOcrProvider
             throw new ArgumentException("Failed to decode image from the provided byte array.", nameof(bytes));
         }
 
-        var result = await GetEngine().Run(src, cancellationToken: ct);
+        var engine = await GetEngineAsync(ct);
+        var result = await engine.Run(src, cancellationToken: ct);
         return result.Text;
     }
 
@@ -53,14 +59,8 @@ internal static class PaddleOcrProvider
         {
             throw new FileNotFoundException("The specified image file was not found.", path);
         }
-
-        using var src = Cv2.ImRead(path, ImreadModes.Color);
-        if (src.Empty())
-        {
-            throw new ArgumentException($"Failed to load image from file: {path}");
-        }
-
-        var result = await GetEngine().Run(src, cancellationToken: ct);
-        return result.Text;
+        
+        byte[] fileBytes = await File.ReadAllBytesAsync(path, ct);
+        return await ExtractFromBytesAsync(fileBytes, ct);
     }
 }
