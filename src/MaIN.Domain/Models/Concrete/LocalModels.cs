@@ -340,7 +340,7 @@ public sealed record QwenImage() : LocalDiffusionModel(
 // ===== Embedding Model =====
 
 public sealed record Mxbai_Embedding() : LocalModel(
-    "mxbai-embedding",
+    Models.Local.MxbaiEmbedding,
     "mxbai-embed-large-v1.Q4_K_M.gguf",
     new Uri("https://huggingface.co/ChristianAzinn/mxbai-embed-large-v1-gguf/resolve/main/mxbai-embed-large-v1.Q4_K_M.gguf?download=true"),
     "mxbai-embed-large v1",
