@@ -26,7 +26,7 @@ public class MemoryFactory() : IMemoryFactory
             MemoryParams memoryParams)
     {
         var path = ResolvePath(modelsPath);
-        var embeddingModel = (LocalModel)ModelRegistry.GetById("mxbai-embedding");
+        var embeddingModel = (LocalModel)ModelRegistry.GetById(MaIN.Domain.Models.Models.Local.MxbaiEmbedding);
         var embeddingModelPath = Path.Combine(path, embeddingModel.FileName);
         var modelPath = Path.Combine(path, modelName);
         var generator = ConfigureGeneratorOptions(embeddingModelPath, modelPath, memoryParams);

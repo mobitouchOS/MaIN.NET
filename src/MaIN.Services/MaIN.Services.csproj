@@ -29,8 +29,19 @@
       <PackageReference Include="NAudio" Version="2.2.1" />
       <PackageReference Include="NumSharp" Version="0.30.0" />
       <PackageReference Include="System.Data.SqlClient" Version="4.8.6" />
-      <PackageReference Include="Tesseract" Version="5.2.0" />
-      <PackageReference Include="Tesseract.Data.English" Version="4.0.0" />
+      <!-- OCR (PaddleOCR + OpenCvSharp) -->
+      <PackageReference Include="Sdcb.PaddleOCR" Version="3.3.1" />
+      <PackageReference Include="Sdcb.PaddleInference" Version="3.3.1" />
+      <PackageReference Include="Sdcb.PaddleOCR.Models.Online" Version="3.3.1" />
+      <PackageReference Include="OpenCvSharp4" Version="4.13.0.20260627" />
+      <PackageReference Include="Sdcb.PaddleInference.runtime.win64.openblas" Version="3.3.1.70" />
+      <PackageReference Include="Sdcb.PaddleInference.runtime.linux-x64.openblas" Version="3.3.1.70" />
+      <PackageReference Include="Sdcb.PaddleInference.runtime.osx-arm64" Version="3.3.1.70" />
+      <PackageReference Include="Sdcb.PaddleInference.runtime.osx-x64" Version="3.3.1.70" />
+      <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.13.0.20260627" />
+      <PackageReference Include="OpenCvSharp4.official.runtime.linux-x64" Version="4.13.0.20260627" />
+      <PackageReference Include="OpenCvSharp4.runtime.osx.arm64" Version="4.13.0.20260627" />
+      <PackageReference Include="OpenCvSharp4.runtime.osx.x64" Version="4.13.0.20260627" />
     </ItemGroup>
 
 </Project>

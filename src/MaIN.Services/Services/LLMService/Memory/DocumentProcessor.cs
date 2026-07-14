@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Spreadsheet;
 using DocumentFormat.OpenXml.Wordprocessing;
-using Tesseract;
+using MaIN.Services.Services.PaddleOcr;
 using UglyToad.PdfPig;
 using UglyToad.PdfPig.Content;
 using Page = UglyToad.PdfPig.Content.Page;
@@ -444,11 +444,7 @@ public static class DocumentProcessor
 
         try
         {
-            using var engine = new TesseractEngine("./tessdata", "eng", EngineMode.Default);
-            using var img = Pix.LoadFromFile(filePath);
-            using var page = engine.Process(img);
-
-            string text = page.GetText();
+            string text = PaddleOcrProvider.ExtractFromFileAsync(filePath).GetAwaiter().GetResult();
             var lines = text.Split('\n');
             bool inTable = false;
 

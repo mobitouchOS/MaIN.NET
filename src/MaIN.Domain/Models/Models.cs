@@ -182,6 +182,7 @@ public static class Models
 
         // Embedding
         public const string NomicEmbedding = "nomic-embedding";
+        public const string MxbaiEmbedding = "mxbai-embedding";
 
         // TTS
         public const string Kokoro82m = "kokoro-82m";
