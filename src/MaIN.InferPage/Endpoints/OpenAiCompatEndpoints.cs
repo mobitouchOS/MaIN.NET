@@ -4,6 +4,7 @@ using MaIN.Core.Hub.Utils;
 using MaIN.Domain.Entities.Tools;
 using MaIN.Domain.Models.Abstract;
 using MaIN.Services.Services.Models;
+using MaIN.Services.Services.LLMService.Utils;
 
 namespace MaIN.InferPage.Endpoints;
 
@@ -258,27 +259,43 @@ public static class OpenAiCompatEndpoints
         HttpResponse response,
         CancellationToken ct)
     {
-        var toolsBuilder = new ToolsConfigurationBuilder().WithMaxIterations(1);
+        var httpClientFactory = response.HttpContext.RequestServices.GetService<IHttpClientFactory>();
+        var toolsBuilder = new ToolsConfigurationBuilder();
+        bool hasServerSideTools = false;
+
         foreach (var tool in request.Tools!)
         {
-            // JsonElement boxes directly as object (no re-serialization needed) -- ToolDefinition.Parameters
-            // is a plain `object` re-serialized later by whichever backend builds the outbound tool schema.
-            object parameters;
-            if (tool.Function.Parameters.HasValue)
+            var toolNameOrType = tool.Function?.Name ?? tool.Type;
+            if (HostedToolsResolver.TryResolveBuiltInTool(toolNameOrType, httpClientFactory, out var builtInTool))
             {
-                parameters = tool.Function.Parameters.Value;
+                builtInTool.IsClientSide = false;
+                toolsBuilder.AddTool(builtInTool);
+                hasServerSideTools = true;
             }
-            else
+            else if (tool.Function != null)
             {
-                parameters = new { type = "object", properties = new { } };
-            }
+                // JsonElement boxes directly as object (no re-serialization needed) -- ToolDefinition.Parameters
+                // is a plain `object` re-serialized later by whichever backend builds the outbound tool schema.
+                object parameters;
+                if (tool.Function.Parameters.HasValue)
+                {
+                    parameters = tool.Function.Parameters.Value;
+                }
+                else
+                {
+                    parameters = new { type = "object", properties = new { } };
+                }
 
-            toolsBuilder.AddTool(
-                name: tool.Function.Name,
-                description: tool.Function.Description ?? string.Empty,
-                parameters: parameters,
-                execute: (string _) => Task.FromResult("{\"status\":\"pending_client_execution\"}"));
+                toolsBuilder.AddTool(
+                    name: tool.Function.Name,
+                    description: tool.Function.Description ?? string.Empty,
+                    parameters: parameters,
+                    execute: (string _) => Task.FromResult("{\"status\":\"pending_client_execution\"}"),
+                    isClientSide: true);
+            }
         }
+
+        toolsBuilder.WithMaxIterations(hasServerSideTools ? 5 : 1);
 
         if (!string.IsNullOrEmpty(request.ToolChoice))
         {
@@ -294,7 +311,7 @@ public static class OpenAiCompatEndpoints
             result = await context.CompleteAsync(
                 toolCallback: invocation =>
                 {
-                    if (!invocation.Done)
+                    if (!invocation.Done && invocation.IsClientSide)
                     {
                         invocations.Add(invocation);
                     }

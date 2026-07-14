@@ -15,13 +15,20 @@ public sealed class ToolsConfigurationBuilder
         return this;
     }
 
+    public ToolsConfigurationBuilder AddTool(ToolDefinition tool)
+    {
+        _config.Tools.Add(tool);
+        return this;
+    }
+
     public ToolsConfigurationBuilder AddTool(
         string name,
         string description,
         object parameters,
-        Func<string, Task<string>> execute)
+        Func<string, Task<string>> execute,
+        bool isClientSide = false)
     {
-        return AddToolCore(name, description, parameters, execute);
+        return AddToolCore(name, description, parameters, execute, isClientSide);
     }
 
     public ToolsConfigurationBuilder AddTool(
@@ -85,12 +92,14 @@ public sealed class ToolsConfigurationBuilder
         string name,
         string description,
         object parameters,
-        Func<string, Task<string>> execute)
+        Func<string, Task<string>> execute,
+        bool isClientSide = false)
     {
         _config.Tools.Add(new ToolDefinition
         {
             Function = new FunctionDefinition { Name = name, Description = description, Parameters = parameters },
-            Execute = execute
+            Execute = execute,
+            IsClientSide = isClientSide
         });
         return this;
     }

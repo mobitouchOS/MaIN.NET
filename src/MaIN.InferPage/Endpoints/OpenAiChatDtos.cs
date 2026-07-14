@@ -28,7 +28,7 @@ public sealed class ChatCompletionRequestMessage
 public sealed class ChatCompletionTool
 {
     public string Type { get; set; } = "function";
-    public required ChatCompletionFunctionDefinition Function { get; set; }
+    public ChatCompletionFunctionDefinition? Function { get; set; }
 }
 
 public sealed class ChatCompletionFunctionDefinition
