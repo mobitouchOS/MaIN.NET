@@ -12,7 +12,25 @@ public static class OpenAiInferenceParamsMapper
     {
         var temperature = request.Temperature.HasValue ? (float?)request.Temperature.Value : null;
         var topP = request.TopP.HasValue ? (float?)request.TopP.Value : null;
-        var (nativeResponseFormat, grammar) = ResolveResponseFormat(backend, request.ResponseFormat);
+        return BuildInternal(backend, temperature, topP, request.MaxTokens, request.Stop, request.ResponseFormat);
+    }
+
+    public static IBackendInferenceParams Build(BackendType backend, CreateResponseRequest request)
+    {
+        var temperature = request.Temperature.HasValue ? (float?)request.Temperature.Value : null;
+        var topP = request.TopP.HasValue ? (float?)request.TopP.Value : null;
+        return BuildInternal(backend, temperature, topP, request.ResolvedMaxTokens, null, request.ResponseFormat);
+    }
+
+    private static IBackendInferenceParams BuildInternal(
+        BackendType backend,
+        float? temperature,
+        float? topP,
+        int? maxTokens,
+        List<string>? stop,
+        ChatCompletionResponseFormat? responseFormat)
+    {
+        var (nativeResponseFormat, grammar) = ResolveResponseFormat(backend, responseFormat);
 
         return backend switch
         {
@@ -20,14 +38,14 @@ public static class OpenAiInferenceParamsMapper
             {
                 Temperature = temperature ?? 0.8f,
                 TopP = topP ?? 0.9f,
-                MaxTokens = request.MaxTokens ?? -1,
+                MaxTokens = maxTokens ?? -1,
                 Grammar = grammar
             },
             BackendType.OpenAi => new OpenAiInferenceParams
             {
                 Temperature = temperature,
                 TopP = topP,
-                MaxTokens = request.MaxTokens,
+                MaxTokens = maxTokens,
                 ResponseFormat = nativeResponseFormat,
                 Grammar = grammar
             },
@@ -35,7 +53,7 @@ public static class OpenAiInferenceParamsMapper
             {
                 Temperature = temperature,
                 TopP = topP,
-                MaxTokens = request.MaxTokens,
+                MaxTokens = maxTokens,
                 ResponseFormat = nativeResponseFormat,
                 Grammar = grammar
             },
@@ -43,7 +61,7 @@ public static class OpenAiInferenceParamsMapper
             {
                 Temperature = temperature,
                 TopP = topP,
-                MaxTokens = request.MaxTokens,
+                MaxTokens = maxTokens,
                 ResponseFormat = nativeResponseFormat,
                 Grammar = grammar
             },
@@ -51,47 +69,44 @@ public static class OpenAiInferenceParamsMapper
             {
                 Temperature = temperature,
                 TopP = topP,
-                MaxTokens = request.MaxTokens,
+                MaxTokens = maxTokens,
                 Grammar = grammar
             },
             BackendType.Gemini => new GeminiInferenceParams
             {
                 Temperature = temperature,
                 TopP = topP,
-                MaxTokens = request.MaxTokens,
-                StopSequences = request.Stop?.ToArray(),
+                MaxTokens = maxTokens,
+                StopSequences = stop?.ToArray(),
                 Grammar = grammar
             },
             BackendType.Anthropic => new AnthropicInferenceParams
             {
                 Temperature = temperature,
                 TopP = topP,
-                MaxTokens = request.MaxTokens,
+                MaxTokens = maxTokens,
                 Grammar = grammar
             },
             BackendType.Ollama => new OllamaInferenceParams
             {
                 Temperature = temperature,
                 TopP = topP,
-                MaxTokens = request.MaxTokens,
+                MaxTokens = maxTokens,
                 Grammar = grammar
             },
             BackendType.Vertex => new VertexInferenceParams
             {
                 Temperature = temperature,
                 TopP = topP,
-                MaxTokens = request.MaxTokens,
-                StopSequences = request.Stop?.ToArray(),
+                MaxTokens = maxTokens,
+                StopSequences = stop?.ToArray(),
                 Grammar = grammar
             },
-            // Unreachable today (every BackendType member is handled above) -- mirrors the Self
-            // case's defaults rather than leaving MaxTokens at 0 if BackendType ever grows a member
-            // this switch doesn't yet know about.
             _ => new LocalInferenceParams
             {
                 Temperature = temperature ?? 0.8f,
                 TopP = topP ?? 0.9f,
-                MaxTokens = request.MaxTokens ?? -1,
+                MaxTokens = maxTokens ?? -1,
                 Grammar = grammar
             }
         };
