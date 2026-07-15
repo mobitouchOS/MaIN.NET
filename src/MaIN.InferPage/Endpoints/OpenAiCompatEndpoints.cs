@@ -268,6 +268,7 @@ public static class OpenAiCompatEndpoints
             var toolNameOrType = tool.Function?.Name ?? tool.Type;
             if (HostedToolsResolver.TryResolveBuiltInTool(toolNameOrType, httpClientFactory, out var builtInTool))
             {
+                builtInTool.Type = tool.Type;
                 builtInTool.IsClientSide = false;
                 toolsBuilder.AddTool(builtInTool);
                 hasServerSideTools = true;

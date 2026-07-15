@@ -1017,7 +1017,7 @@ public abstract class OpenAiCompatibleService(
             requestBody["tools"] = chat.ToolsConfiguration.Tools.Select(t => new
             {
                 type = t.Type,
-                function = t.Function is not null ? new
+                function = string.Equals(t.Type, "function", StringComparison.OrdinalIgnoreCase) && t.Function is not null ? new
                 {
                     name = t.Function.Name,
                     description = t.Function.Description,

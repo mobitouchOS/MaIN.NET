@@ -60,4 +60,29 @@ public class ChatCompletionsBuiltInToolsTests : InferPageEndpointTestBase
         Assert.Equal("stop", choice.GetProperty("finish_reason").GetString());
         Assert.Equal("I have enabled web search capabilities for this query.", choice.GetProperty("message").GetProperty("content").GetString());
     }
+
+    [Fact]
+    public async Task ChatCompletions_SupportsOpenAiHostedWebSearchType_WithoutFunctionDefinition()
+    {
+        HttpHandler.ResponseBody = OpenAiResponse("Search results found for query.");
+
+        var response = await Client.PostAsJsonAsync("/v1/chat/completions", new
+        {
+            messages = new[] { new { role = "user", content = "Tell me latest news today." } },
+            tools = new object[]
+            {
+                new
+                {
+                    type = "web_search"
+                }
+            }
+        });
+
+        response.EnsureSuccessStatusCode();
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        var choice = body.GetProperty("choices")[0];
+
+        Assert.Equal("stop", choice.GetProperty("finish_reason").GetString());
+        Assert.Equal("Search results found for query.", choice.GetProperty("message").GetProperty("content").GetString());
+    }
 }

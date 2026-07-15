@@ -1,6 +1,7 @@
 using System.Text.Json;
 using MaIN.Domain.Entities.Tools;
 using MaIN.Domain.Exceptions.Tools;
+using MaIN.Services.Services.LLMService.Utils;
 
 namespace MaIN.Core.Hub.Utils;
 
@@ -11,7 +12,15 @@ public sealed class ToolsConfigurationBuilder
 
     public ToolsConfigurationBuilder AddDefaultTool(string type)
     {
-        _config.Tools.Add(new ToolDefinition { Type = type });
+        if (HostedToolsResolver.TryResolveBuiltInTool(type, null, out var builtInTool))
+        {
+            builtInTool.Type = type;
+            _config.Tools.Add(builtInTool);
+        }
+        else
+        {
+            _config.Tools.Add(new ToolDefinition { Type = type });
+        }
         return this;
     }
 
