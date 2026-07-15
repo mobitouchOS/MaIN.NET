@@ -7,14 +7,16 @@ namespace MaIN.InferPage.IntegrationTests;
 public class ChatCompletionsBuiltInToolsTests : InferPageEndpointTestBase
 {
     [Fact]
-    public async Task ChatCompletions_ExecutesBuiltInCalculatorServerSide_WhenRequestedAsTool()
+    public async Task ChatCompletions_ExecutesBuiltInHttpRequestServerSide_WhenRequestedAsTool()
     {
-        HttpHandler.EnqueueResponse(OpenAiToolCallResponse("calculator", """{"expression":"20 + 22"}"""));
-        HttpHandler.EnqueueResponse(OpenAiResponse("The exact answer is 42."));
+        HttpHandler.ResponseBody = OpenAiResponse("API status is operational.");
+        HttpHandler.EnqueueResponse(OpenAiToolCallResponse("http_request", """{"url":"https://api.example.com/status"}"""));
+        HttpHandler.EnqueueResponse("{\"status\": \"operational\"}");
+        HttpHandler.EnqueueResponse(OpenAiResponse("API status is operational."));
 
         var response = await Client.PostAsJsonAsync("/v1/chat/completions", new
         {
-            messages = new[] { new { role = "user", content = "Compute 20 + 22 exactly." } },
+            messages = new[] { new { role = "user", content = "Check API status." } },
             tools = new object[]
             {
                 new
@@ -22,7 +24,7 @@ public class ChatCompletionsBuiltInToolsTests : InferPageEndpointTestBase
                     type = "function",
                     function = new
                     {
-                        name = "calculator"
+                        name = "http_request"
                     }
                 }
             }
@@ -33,7 +35,7 @@ public class ChatCompletionsBuiltInToolsTests : InferPageEndpointTestBase
         var choice = body.GetProperty("choices")[0];
 
         Assert.Equal("stop", choice.GetProperty("finish_reason").GetString());
-        Assert.Equal("The exact answer is 42.", choice.GetProperty("message").GetProperty("content").GetString());
+        Assert.Equal("API status is operational.", choice.GetProperty("message").GetProperty("content").GetString());
     }
 
     [Fact]

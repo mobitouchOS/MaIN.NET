@@ -37,9 +37,22 @@ public static class HostedToolsResolver
                 tool = DateTimeTool.Create(toolName: normalized);
                 return true;
 
-            case "calculator":
-            case "math_eval":
-                tool = CalculatorTool.Create(toolName: normalized);
+            case "http_request":
+            case "fetch_api":
+            case "api_request":
+                tool = HttpRequestTool.Create(httpClientFactory, toolName: normalized);
+                return true;
+
+            case "rss_feed_reader":
+            case "read_rss":
+            case "get_rss_feed":
+                tool = RssFeedReaderTool.Create(httpClientFactory, toolName: normalized);
+                return true;
+
+            case "extract_url_metadata":
+            case "get_url_metadata":
+            case "link_preview":
+                tool = UrlMetadataExtractorTool.Create(httpClientFactory, toolName: normalized);
                 return true;
 
             default:
@@ -55,7 +68,9 @@ public static class HostedToolsResolver
             WebSearchTool.Create(httpClientFactory),
             WebPageFetchTool.Create(httpClientFactory),
             DateTimeTool.Create(),
-            CalculatorTool.Create()
+            HttpRequestTool.Create(httpClientFactory),
+            RssFeedReaderTool.Create(httpClientFactory),
+            UrlMetadataExtractorTool.Create(httpClientFactory)
         ];
     }
 }

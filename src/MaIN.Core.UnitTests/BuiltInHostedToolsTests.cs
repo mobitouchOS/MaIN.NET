@@ -12,8 +12,12 @@ public class BuiltInHostedToolsTests
     [InlineData("read_url", "read_url")]
     [InlineData("get_current_datetime", "get_current_datetime")]
     [InlineData("datetime", "datetime")]
-    [InlineData("calculator", "calculator")]
-    [InlineData("math_eval", "math_eval")]
+    [InlineData("http_request", "http_request")]
+    [InlineData("fetch_api", "fetch_api")]
+    [InlineData("rss_feed_reader", "rss_feed_reader")]
+    [InlineData("read_rss", "read_rss")]
+    [InlineData("extract_url_metadata", "extract_url_metadata")]
+    [InlineData("link_preview", "link_preview")]
     public void TryResolveBuiltInTool_ResolvesKnownNamesAndTypes(string inputName, string expectedName)
     {
         var resolved = HostedToolsResolver.TryResolveBuiltInTool(inputName, null, out var tool);
@@ -48,21 +52,41 @@ public class BuiltInHostedToolsTests
 
     [Fact]
     [Trait("Category", "Unit")]
-    public async Task CalculatorTool_EvaluatesMathExpressions()
+    public async Task HttpRequestTool_ReturnsErrorForMissingUrl()
     {
-        var tool = CalculatorTool.Create();
-        var result = await tool.Execute!.Invoke("""{"expression":"15 * 4 + 10"}""");
+        var tool = HttpRequestTool.Create();
+        var result = await tool.Execute!.Invoke("{}");
 
-        Assert.Contains("70", result);
+        Assert.Contains("Missing required parameter 'url'", result);
     }
 
     [Fact]
     [Trait("Category", "Unit")]
-    public void GetAllBuiltInTools_ReturnsAllFourBuiltInTools()
+    public async Task RssFeedReaderTool_ReturnsErrorForInvalidUrl()
+    {
+        var tool = RssFeedReaderTool.Create();
+        var result = await tool.Execute!.Invoke("""{"feed_url":"not_a_valid_url"}""");
+
+        Assert.Contains("Invalid feed URL", result);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task UrlMetadataExtractorTool_ReturnsErrorForInvalidUrl()
+    {
+        var tool = UrlMetadataExtractorTool.Create();
+        var result = await tool.Execute!.Invoke("""{"url":"ftp://invalid.schema"}""");
+
+        Assert.Contains("Invalid URL schema", result);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void GetAllBuiltInTools_ReturnsAllSixBuiltInTools()
     {
         var tools = HostedToolsResolver.GetAllBuiltInTools();
 
-        Assert.Equal(4, tools.Count);
+        Assert.Equal(6, tools.Count);
         Assert.All(tools, t => Assert.False(t.IsClientSide));
         Assert.All(tools, t => Assert.NotNull(t.Execute));
     }
