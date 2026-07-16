@@ -753,9 +753,10 @@ public class LLMService : ILLMService
             var toolCalls = parseResult.ToolCalls!;
             responseMessage.Properties[ServiceConstants.Properties.ToolCallsProperty] = JsonSerializer.Serialize(toolCalls);
 
-            if (chat.Properties.CheckProperty(ServiceConstants.Properties.ClientSideToolExecutionProperty))
+            if (chat.Properties.CheckProperty(ServiceConstants.Properties.ClientSideToolExecutionProperty) &&
+                toolCalls.Any(tc => chat.ToolsConfiguration?.GetDefinition(tc.Function.Name)?.IsClientSide != false))
             {
-                foreach (var toolCall in toolCalls)
+                foreach (var toolCall in toolCalls.Where(tc => chat.ToolsConfiguration?.GetDefinition(tc.Function.Name)?.IsClientSide != false))
                 {
                     if (requestOptions.ToolCallback is not null)
                     {
@@ -763,7 +764,8 @@ public class LLMService : ILLMService
                         {
                             ToolName = toolCall.Function.Name,
                             Arguments = toolCall.Function.Arguments,
-                            Done = false
+                            Done = false,
+                            IsClientSide = true
                         });
                     }
                 }

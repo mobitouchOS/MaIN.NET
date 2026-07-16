@@ -227,9 +227,10 @@ public abstract class OpenAiCompatibleService(
                 ToolCalls = currentToolCalls
             });
 
-            if (chat.Properties.CheckProperty(ServiceConstants.Properties.ClientSideToolExecutionProperty))
+            if (chat.Properties.CheckProperty(ServiceConstants.Properties.ClientSideToolExecutionProperty) &&
+                currentToolCalls.Any(tc => chat.ToolsConfiguration?.GetDefinition(tc.Function.Name)?.IsClientSide != false))
             {
-                foreach (var toolCall in currentToolCalls)
+                foreach (var toolCall in currentToolCalls.Where(tc => chat.ToolsConfiguration?.GetDefinition(tc.Function.Name)?.IsClientSide != false))
                 {
                     if (options.ToolCallback is not null)
                     {
@@ -237,7 +238,8 @@ public abstract class OpenAiCompatibleService(
                         {
                             ToolName = toolCall.Function.Name,
                             Arguments = toolCall.Function.Arguments,
-                            Done = false
+                            Done = false,
+                            IsClientSide = true
                         });
                     }
                 }
@@ -1015,7 +1017,7 @@ public abstract class OpenAiCompatibleService(
             requestBody["tools"] = chat.ToolsConfiguration.Tools.Select(t => new
             {
                 type = t.Type,
-                function = t.Function is not null ? new
+                function = string.Equals(t.Type, "function", StringComparison.OrdinalIgnoreCase) && t.Function is not null ? new
                 {
                     name = t.Function.Name,
                     description = t.Function.Description,

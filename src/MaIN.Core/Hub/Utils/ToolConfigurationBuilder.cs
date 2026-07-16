@@ -1,6 +1,7 @@
 using System.Text.Json;
 using MaIN.Domain.Entities.Tools;
 using MaIN.Domain.Exceptions.Tools;
+using MaIN.Services.Services.LLMService.Utils;
 
 namespace MaIN.Core.Hub.Utils;
 
@@ -11,7 +12,21 @@ public sealed class ToolsConfigurationBuilder
 
     public ToolsConfigurationBuilder AddDefaultTool(string type)
     {
-        _config.Tools.Add(new ToolDefinition { Type = type });
+        if (HostedToolsResolver.TryResolveBuiltInTool(type, null, out var builtInTool))
+        {
+            builtInTool.Type = type;
+            _config.Tools.Add(builtInTool);
+        }
+        else
+        {
+            _config.Tools.Add(new ToolDefinition { Type = type });
+        }
+        return this;
+    }
+
+    public ToolsConfigurationBuilder AddTool(ToolDefinition tool)
+    {
+        _config.Tools.Add(tool);
         return this;
     }
 
@@ -19,9 +34,10 @@ public sealed class ToolsConfigurationBuilder
         string name,
         string description,
         object parameters,
-        Func<string, Task<string>> execute)
+        Func<string, Task<string>> execute,
+        bool isClientSide = false)
     {
-        return AddToolCore(name, description, parameters, execute);
+        return AddToolCore(name, description, parameters, execute, isClientSide);
     }
 
     public ToolsConfigurationBuilder AddTool(
@@ -85,12 +101,14 @@ public sealed class ToolsConfigurationBuilder
         string name,
         string description,
         object parameters,
-        Func<string, Task<string>> execute)
+        Func<string, Task<string>> execute,
+        bool isClientSide = false)
     {
         _config.Tools.Add(new ToolDefinition
         {
             Function = new FunctionDefinition { Name = name, Description = description, Parameters = parameters },
-            Execute = execute
+            Execute = execute,
+            IsClientSide = isClientSide
         });
         return this;
     }

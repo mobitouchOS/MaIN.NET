@@ -234,9 +234,10 @@ public sealed class AnthropicService(
 
             conversation.Add(new ChatMessage(ServiceConstants.Roles.Assistant, assistantContent));
 
-            if (chat.Properties.CheckProperty(ServiceConstants.Properties.ClientSideToolExecutionProperty))
+            if (chat.Properties.CheckProperty(ServiceConstants.Properties.ClientSideToolExecutionProperty) &&
+                currentToolUses.Any(tu => chat.ToolsConfiguration?.GetDefinition(tu.Name)?.IsClientSide != false))
             {
-                foreach (var toolUse in currentToolUses)
+                foreach (var toolUse in currentToolUses.Where(tu => chat.ToolsConfiguration?.GetDefinition(tu.Name)?.IsClientSide != false))
                 {
                     if (options.ToolCallback is not null)
                     {
@@ -244,7 +245,8 @@ public sealed class AnthropicService(
                         {
                             ToolName = toolUse.Name,
                             Arguments = toolUse.Input.ToString() ?? string.Empty,
-                            Done = false
+                            Done = false,
+                            IsClientSide = true
                         });
                     }
                 }

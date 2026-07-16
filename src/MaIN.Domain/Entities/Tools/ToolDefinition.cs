@@ -1,4 +1,4 @@
-﻿using System.Text.Json.Serialization;
+using System.Text.Json.Serialization;
 
 namespace MaIN.Domain.Entities.Tools;
 
@@ -9,4 +9,7 @@ public class ToolDefinition
     
     [JsonIgnore]
     public Func<string, Task<string>>? Execute { get; set; }
+
+    [JsonIgnore]
+    public bool IsClientSide { get; set; }
 }

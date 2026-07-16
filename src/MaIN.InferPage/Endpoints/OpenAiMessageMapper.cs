@@ -117,4 +117,76 @@ public static class OpenAiMessageMapper
             Function = new ChatCompletionFunctionCallDto { Name = inv.ToolName, Arguments = inv.Arguments }
         }).ToList();
     }
+
+    public static List<object> ToResponseOutputItems(IEnumerable<ToolInvocation> invocations)
+    {
+        return invocations.Select(inv => (object)new ResponseOutputItemFunctionCall
+        {
+            Id = $"call_{Guid.NewGuid():N}",
+            Type = "function_call",
+            Name = inv.ToolName,
+            Arguments = inv.Arguments
+        }).ToList();
+    }
+
+    public static (string? SystemPrompt, List<Message> Messages) ToMainMessages(CreateResponseRequest request)
+    {
+        string? systemPrompt = request.Instructions;
+        var messages = new List<Message>();
+
+        if (!request.Input.HasValue || request.Input.Value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+        {
+            return (systemPrompt, messages);
+        }
+
+        var element = request.Input.Value;
+        if (element.ValueKind == JsonValueKind.String)
+        {
+            messages.Add(new Message
+            {
+                Role = "User",
+                Content = element.GetString() ?? string.Empty,
+                Type = MessageType.NotSet,
+                Time = DateTime.Now
+            });
+            return (systemPrompt, messages);
+        }
+
+        if (element.ValueKind == JsonValueKind.Array)
+        {
+            var incoming = new List<ChatCompletionRequestMessage>();
+            foreach (var item in element.EnumerateArray())
+            {
+                if (item.ValueKind == JsonValueKind.String)
+                {
+                    incoming.Add(new ChatCompletionRequestMessage { Role = "user", Content = JsonDocument.Parse(JsonSerializer.Serialize(item.GetString(), OpenAiJsonOptions.Options)).RootElement });
+                }
+                else if (item.ValueKind == JsonValueKind.Object)
+                {
+                    try
+                    {
+                        var m = item.Deserialize<ChatCompletionRequestMessage>(OpenAiJsonOptions.Options);
+                        if (m is not null)
+                        {
+                            if (string.IsNullOrEmpty(m.Role) && item.TryGetProperty("type", out var typeProp) && typeProp.GetString() == "message")
+                            {
+                                m.Role = "user";
+                            }
+                            incoming.Add(m);
+                        }
+                    }
+                    catch { }
+                }
+            }
+
+            var (innerSystem, innerMessages) = ToMainMessages(incoming);
+            if (!string.IsNullOrEmpty(innerSystem))
+            {
+                systemPrompt = string.IsNullOrEmpty(systemPrompt) ? innerSystem : $"{systemPrompt}\n{innerSystem}";
+            }
+            messages.AddRange(innerMessages);
+        }
+
+        return (systemPrompt, messages);
+    }
 }

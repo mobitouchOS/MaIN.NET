@@ -12,6 +12,10 @@ public sealed class FakeHttpMessageHandler : HttpMessageHandler
     public HttpStatusCode ResponseStatusCode { get; set; } = HttpStatusCode.OK;
     public string ResponseBody { get; set; } = string.Empty;
 
+    private readonly Queue<string> _responseQueue = new();
+
+    public void EnqueueResponse(string body) => _responseQueue.Enqueue(body);
+
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
     {
         LastRequest = request;
@@ -25,9 +29,10 @@ public sealed class FakeHttpMessageHandler : HttpMessageHandler
             catch { }
         }
 
+        var body = _responseQueue.Count > 0 ? _responseQueue.Dequeue() : ResponseBody;
         return new HttpResponseMessage(ResponseStatusCode)
         {
-            Content = new StringContent(ResponseBody, Encoding.UTF8, "application/json")
+            Content = new StringContent(body, Encoding.UTF8, "application/json")
         };
     }
 }
