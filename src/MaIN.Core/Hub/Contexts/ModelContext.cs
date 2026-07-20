@@ -158,14 +158,14 @@ public sealed class ModelContext : IModelContext
 
     private async Task DownloadAssetAsync(Uri downloadUrl, string filePath, string fileName, IProgress<DownloadProgress>? progress, CancellationToken cancellationToken)
     {
-        Console.WriteLine($"Starting download of {fileName}...");
+        ProgressRenderer.Update(fileName, "Starting download...");
 
         for (int attempt = 0; attempt <= MaxRetryAttempts; attempt++)
         {
             if (attempt > 0)
             {
                 var delay = TimeSpan.FromSeconds(Math.Min(2 * Math.Pow(2, attempt - 1), 60));
-                Console.WriteLine($"\nRetrying ({attempt}/{MaxRetryAttempts}) in {delay.TotalSeconds:F0}s...");
+                ProgressRenderer.Update(fileName, $"Retrying ({attempt}/{MaxRetryAttempts}) in {delay.TotalSeconds:F0}s...");
                 await Task.Delay(delay, cancellationToken);
             }
 
@@ -181,7 +181,7 @@ public sealed class ModelContext : IModelContext
             }
             catch (Exception ex) when (attempt < MaxRetryAttempts)
             {
-                Console.WriteLine($"\nDownload error: {ex.Message}");
+                ProgressRenderer.Update(fileName, $"Download error: {ex.Message}");
             }
         }
 
@@ -202,7 +202,7 @@ public sealed class ModelContext : IModelContext
 
         if (response.StatusCode == System.Net.HttpStatusCode.RequestedRangeNotSatisfiable)
         {
-            Console.WriteLine("\nFile already fully downloaded.");
+            ProgressRenderer.Update(fileName, "File already fully downloaded.");
             return;
         }
 
@@ -216,9 +216,9 @@ public sealed class ModelContext : IModelContext
             : null;
 
         if (isResume)
-            Console.WriteLine($"Resuming from {FormatBytes(resumeFrom)}...");
+            ProgressRenderer.Update(fileName, $"Resuming from {FormatBytes(resumeFrom)}...");
         else if (totalBytes.HasValue)
-            Console.WriteLine($"File size: {FormatBytes(totalBytes.Value)}");
+            ProgressRenderer.Update(fileName, $"File size: {FormatBytes(totalBytes.Value)}");
 
         var fileMode = isResume ? FileMode.Append : FileMode.Create;
         await using var fileStream = new FileStream(filePath, fileMode, FileAccess.Write, FileShare.None, FileStreamBufferSize);
@@ -259,7 +259,7 @@ public sealed class ModelContext : IModelContext
             {
                 var elapsed = totalStopwatch.Elapsed.TotalSeconds;
                 var speed = elapsed > 0 ? totalBytesRead / elapsed : 0;
-                ShowProgress(totalBytesRead, totalBytes, totalStopwatch);
+                ShowProgress(totalBytesRead, totalBytes, totalStopwatch, fileName);
                 progress?.Report(new DownloadProgress(totalBytesRead, totalBytes, speed));
                 progressStopwatch.Restart();
             }
@@ -267,8 +267,9 @@ public sealed class ModelContext : IModelContext
 
         var totalTime = totalStopwatch.Elapsed;
         var avgSpeed = totalTime.TotalSeconds > 0 ? totalBytesRead / totalTime.TotalSeconds : 0;
-        Console.WriteLine($"\nDownload completed: {fileName}. " +
-                          $"Total: {FormatBytes(totalBytesRead)}, Time: {totalTime:hh\\:mm\\:ss}, Speed: {FormatBytes((long)avgSpeed)}/s");
+        ProgressRenderer.Update(fileName,
+            $"Download completed. Total: {FormatBytes(totalBytesRead)}, Time: {totalTime:hh\\:mm\\:ss}, " +
+            $"Speed: {FormatBytes((long)avgSpeed)}/s, Location: {file.Name}");
         progress?.Report(new DownloadProgress(totalBytesRead, totalBytes, 0));
     }
 
@@ -285,7 +286,7 @@ public sealed class ModelContext : IModelContext
     private static bool ShouldUpdateProgress(Stopwatch progressStopwatch) =>
         progressStopwatch.ElapsedMilliseconds >= ProgressUpdateIntervalMilliseconds;
 
-    private static void ShowProgress(long totalBytesRead, long? totalBytes, Stopwatch totalStopwatch)
+    private static void ShowProgress(long totalBytesRead, long? totalBytes, Stopwatch totalStopwatch, string fileName)
     {
         var elapsedSeconds = totalStopwatch.Elapsed.TotalSeconds;
         var speed = elapsedSeconds > 0 ? totalBytesRead / elapsedSeconds : 0;
@@ -295,22 +296,74 @@ public sealed class ModelContext : IModelContext
             var progressPercentage = (double)totalBytesRead / totalBytes.Value * 100;
             var eta = speed > 0 ? TimeSpan.FromSeconds((totalBytes.Value - totalBytesRead) / speed) : TimeSpan.Zero;
 
-            var (leftBefore, topBefore) = Console.GetCursorPosition();
-            Console.Write($"\rProgress: {progressPercentage:F1}% ({FormatBytes(totalBytesRead)}/{FormatBytes(totalBytes.Value)}) " +
-                         $"Speed: {FormatBytes((long)speed)}/s ETA: {eta:hh\\:mm\\:ss}");
-
-            var (leftAfter, topAfter) = Console.GetCursorPosition();
-            int lengthDifference = leftBefore - leftAfter + ((topBefore - topAfter) * Console.WindowWidth);
-            while (lengthDifference > 0)
-            {
-                Console.Write(' ');
-                lengthDifference--;
-            }
-            Console.SetCursorPosition(leftAfter, topAfter);
+            ProgressRenderer.Update(fileName,
+                $"Progress: {progressPercentage:F1}% ({FormatBytes(totalBytesRead)}/{FormatBytes(totalBytes.Value)}) " +
+                $"Speed: {FormatBytes((long)speed)}/s ETA: {eta:hh\\:mm\\:ss}");
         }
         else
         {
-            Console.Write($"\rDownloaded: {FormatBytes(totalBytesRead)} Speed: {FormatBytes((long)speed)}/s");
+            ProgressRenderer.Update(fileName,
+                $"Downloaded: {FormatBytes(totalBytesRead)} Speed: {FormatBytes((long)speed)}/s");
+        }
+    }
+
+   
+    private static class ProgressRenderer
+    {
+        private static readonly object Lock = new();
+        private static readonly List<string> Slots = [];
+        private static readonly Dictionary<string, string> Statuses = [];
+
+        public static void Update(string fileName, string status)
+        {
+            lock (Lock)
+            {
+                if (Console.IsOutputRedirected)
+                {
+                    Console.WriteLine($"[{fileName}] {status}");
+                    return;
+                }
+
+                if (!Statuses.ContainsKey(fileName))
+                {
+                    Slots.Add(fileName);
+                    Console.WriteLine(); 
+                }
+
+                Statuses[fileName] = status;
+                Redraw();
+            }
+        }
+
+        private static void Redraw()
+        {
+            int width;
+            try
+            {
+                width = Math.Max(1, Console.WindowWidth - 1);
+            }
+            catch (IOException)
+            {
+                width = int.MaxValue; 
+            }
+
+            var frame = new System.Text.StringBuilder();
+            frame.Append('\x1b').Append('[').Append(Slots.Count).Append('A'); 
+
+            foreach (var slot in Slots)
+            {
+                var text = $"[{slot}] {Statuses[slot]}";
+                if (text.Length > width)
+                {
+                    text = text[..width];
+                }
+
+                frame.Append("\r\x1b[2K"); 
+                frame.Append(text);
+                frame.Append('\n');
+            }
+
+            Console.Write(frame.ToString());
         }
     }
 
