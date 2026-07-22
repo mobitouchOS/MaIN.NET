@@ -22,6 +22,9 @@ public static class Models
         public const string Gpt5_4Nano = "gpt-5.4-nano";
         public const string Gpt5_5 = "gpt-5.5";
         public const string Gpt5_5Pro = "gpt-5.5-pro";
+        public const string Gpt5_6Sol = "gpt-5.6-sol";
+        public const string Gpt5_6Terra = "gpt-5.6-terra";
+        public const string Gpt5_6Luna = "gpt-5.6-luna";
         public const string CodexMini = "codex-mini-latest";
         public const string O3 = "o3";
         public const string O3Mini = "o3-mini";
@@ -32,12 +35,15 @@ public static class Models
 
     public static class Anthropic
     {
+        public const string ClaudeFable5 = "claude-fable-5";
+        public const string ClaudeMythos5 = "claude-mythos-5";
+        public const string ClaudeOpus4_8 = "claude-opus-4-8";
         public const string ClaudeOpus4_7 = "claude-opus-4-7";
+        public const string ClaudeSonnet5 = "claude-sonnet-5";
         public const string ClaudeSonnet4_6 = "claude-sonnet-4-6";
         public const string ClaudeHaiku4_5 = "claude-haiku-4-5-20251001";
         public const string ClaudeSonnet4 = "claude-sonnet-4-20250514";
         public const string ClaudeSonnet4_5 = "claude-sonnet-4-5-20250929";
-        public const string ClaudeSonnet5 = "claude-sonnet-5";
     }
 
     public static class Gemini
@@ -154,11 +160,14 @@ public static class Models
 
         // Qwen
         public const string Qwen2_5_0_5b = "qwen2.5-0.5b";
+        public const string Qwen2_5_7b = "qwen2.5-7b";
         public const string Qwen2_5_Coder_3b = "qwen2.5-coder-3b";
         public const string Qwen2_5_Coder_7b = "qwen2.5-coder-7b";
         public const string Qwen2_5_Coder_14b = "qwen2.5-coder-14b";
         public const string Qwen3_8b = "qwen3-8b";
         public const string Qwen3_14b = "qwen3-14b";
+        public const string Qwen3_5_4b = "qwen3.5-4b";
+        public const string Qwen3_5_9b = "qwen3.5-9b";
         public const string QwQ_7b = "qwq-7b";
 
         // DeepSeek
@@ -168,6 +177,16 @@ public static class Models
         // Phi
         public const string Phi3_5_3b = "phi3.5-3b";
         public const string Phi4_4b = "phi4-4b";
+
+        // Mistral
+        public const string Mistral7b = "mistral-7b";
+        public const string Llama3_2_1b = "llama3.2-1b";
+
+        // NVIDIA
+        public const string Nemotron3Nano4b = "nemotron-3-nano-4b";
+
+        // IBM Granite
+        public const string Granite4_1_3b = "granite-4.1-3b";
 
         // Other
         public const string Lfm2_1_2b = "lfm2-1.2b";

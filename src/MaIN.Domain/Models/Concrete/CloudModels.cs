@@ -212,6 +212,36 @@ public sealed record GptImage1() : CloudModel(
     4000,
     "OpenAI's latest image generation model"), IImageGenerationModel;
 
+public sealed record Gpt5_6Sol() : CloudModel(
+    Models.OpenAi.Gpt5_6Sol,
+    BackendType.OpenAi,
+    "GPT-5.6 Sol",
+    1_050_000,
+    "OpenAI's flagship frontier model for complex reasoning and coding tasks"), IVisionModel
+{
+    public string? MMProjectName => null;
+}
+
+public sealed record Gpt5_6Terra() : CloudModel(
+    Models.OpenAi.Gpt5_6Terra,
+    BackendType.OpenAi,
+    "GPT-5.6 Terra",
+    1_050_000,
+    "OpenAI's balanced model that offers strong intelligence at lower cost than Sol"), IVisionModel
+{
+    public string? MMProjectName => null;
+}
+
+public sealed record Gpt5_6Luna() : CloudModel(
+    Models.OpenAi.Gpt5_6Luna,
+    BackendType.OpenAi,
+    "GPT-5.6 Luna",
+    1_050_000,
+    "OpenAI's cost-optimized model for high-volume, cost-sensitive workloads"), IVisionModel
+{
+    public string? MMProjectName => null;
+}
+
 // ===== Anthropic Models =====
 
 public sealed record ClaudeOpus4_7() : CloudModel(
@@ -272,6 +302,36 @@ public sealed record ClaudeSonnet5() : CloudModel(
     "Claude Sonnet 5",
     200000,
     "Anthropic's latest Sonnet model with enhanced reasoning and multimodal capabilities"), IVisionModel
+{
+    public string? MMProjectName => null;
+}
+
+public sealed record ClaudeFable5() : CloudModel(
+    Models.Anthropic.ClaudeFable5,
+    BackendType.Anthropic,
+    "Claude Fable 5",
+    200000,
+    "Anthropic's 5th-generation Mythos-level model for ambitious, long-running coding and professional work"), IVisionModel
+{
+    public string? MMProjectName => null;
+}
+
+public sealed record ClaudeMythos5() : CloudModel(
+    Models.Anthropic.ClaudeMythos5,
+    BackendType.Anthropic,
+    "Claude Mythos 5",
+    200000,
+    "Anthropic's most advanced model for vetted cybersecurity and biology research partners"), IVisionModel
+{
+    public string? MMProjectName => null;
+}
+
+public sealed record ClaudeOpus4_8() : CloudModel(
+    Models.Anthropic.ClaudeOpus4_8,
+    BackendType.Anthropic,
+    "Claude Opus 4.8",
+    200000,
+    "Anthropic's previous flagship model with strong reasoning and professional capabilities"), IVisionModel
 {
     public string? MMProjectName => null;
 }

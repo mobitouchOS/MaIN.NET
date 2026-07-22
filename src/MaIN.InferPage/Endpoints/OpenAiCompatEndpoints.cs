@@ -245,6 +245,44 @@ public static class OpenAiCompatEndpoints
         Error = new OpenAiError { Message = ex.Message, Type = "server_error" }
     };
 
+    /// <summary>
+    /// Checks if the tool type is an OpenAI hosted tool (not a function).
+    /// OpenAI hosted tools have a type like "web_search_preview" without a function object.
+    /// </summary>
+    private static bool IsOpenAiHostedTool(string type)
+    {
+        if (string.IsNullOrEmpty(type))
+            return false;
+
+        var normalized = type.Trim().ToLowerInvariant();
+
+        return normalized switch
+        {
+            "web_search_preview" or "web_search" or "search_web" => true,
+            "file_search" => true,
+            "code_interpreter" => true,
+            "computer_use" or "computer_use_preview" => true,
+            _ => false
+        };
+    }
+
+    /// <summary>
+    /// Maps OpenAI hosted tool type names to our internal tool names.
+    /// </summary>
+    private static string MapOpenAiHostedToolName(string openAiType)
+    {
+        var normalized = openAiType.Trim().ToLowerInvariant();
+
+        return normalized switch
+        {
+            "web_search_preview" or "web_search" or "search_web" => "web_search",
+            "file_search" => "file_search",
+            "code_interpreter" => "code_interpreter",
+            "computer_use" or "computer_use_preview" => "computer_use",
+            _ => openAiType
+        };
+    }
+
     private static IResult ServerError(Exception ex) => Results.Json(
         ErrorResponse(ex),
         OpenAiJsonOptions.Options,
@@ -346,8 +384,23 @@ public static class OpenAiCompatEndpoints
 
         foreach (var tool in request.Tools!)
         {
+            // OpenAI hosted tools detection: they have a type like "web_search_preview" without a function object
+            var isOpenAiHostedTool = IsOpenAiHostedTool(tool.Type);
             var toolNameOrType = tool.Function?.Name ?? tool.Type;
-            if (HostedToolsResolver.TryResolveBuiltInTool(toolNameOrType, httpClientFactory, out var builtInTool))
+
+            if (isOpenAiHostedTool)
+            {
+                // Map OpenAI hosted tool types to our internal tool names
+                var internalToolName = MapOpenAiHostedToolName(tool.Type);
+                if (HostedToolsResolver.TryResolveBuiltInTool(internalToolName, httpClientFactory, out var builtInTool))
+                {
+                    builtInTool.Type = tool.Type;
+                    builtInTool.IsClientSide = false;
+                    toolsBuilder.AddTool(builtInTool);
+                    hasServerSideTools = true;
+                }
+            }
+            else if (HostedToolsResolver.TryResolveBuiltInTool(toolNameOrType, httpClientFactory, out var builtInTool))
             {
                 builtInTool.Type = tool.Type;
                 builtInTool.IsClientSide = false;
