@@ -49,7 +49,7 @@ public sealed class ApiLoggingMiddleware(RequestDelegate next, ApiLogService log
             string? responseBody = null;
             if (responseBuffer.Length > 0)
             {
-                using var reader = new StreamReader(responseBuffer);
+                using var reader = new StreamReader(responseBuffer, leaveOpen: true);
                 responseBody = await reader.ReadToEndAsync();
                 responseBuffer.Position = 0;
             }

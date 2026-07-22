@@ -79,7 +79,20 @@ public static class OpenAiCompatEndpoints
                 return Results.Json(authError, OpenAiJsonOptions.Options, statusCode: StatusCodes.Status401Unauthorized);
             }
 
-            return Results.Json(_cachedModelsResponse ?? new ModelListResponse { Data = [] }, OpenAiJsonOptions.Options);
+            var response = _cachedModelsResponse;
+            if (response is null)
+            {
+                response = Utils.BackendType != BackendType.Self
+                    ? new ModelListResponse
+                    {
+                        Data = string.IsNullOrEmpty(Utils.Model)
+                            ? []
+                            : [new ModelData { Id = Utils.Model, Created = DateTimeOffset.UtcNow.ToUnixTimeSeconds() }]
+                    }
+                    : BuildSelfModelsResponse();
+            }
+
+            return Results.Json(response, OpenAiJsonOptions.Options);
         })
         .WithName("ListModels")
         .WithTags("OpenAI-Compatible API")
@@ -334,6 +347,49 @@ public static class OpenAiCompatEndpoints
             "computer_use" or "computer_use_preview" => "computer_use",
             _ => openAiType
         };
+    }
+
+    private static ModelListResponse BuildSelfModelsResponse()
+    {
+        var modelsDir = !string.IsNullOrEmpty(Utils.Path)
+            ? Utils.Path
+            : Utils.DefaultModelsPath;
+
+        if (!Directory.Exists(modelsDir))
+        {
+            return new ModelListResponse { Data = [] };
+        }
+
+        var ggufFiles = Directory.GetFiles(modelsDir, "*.gguf", SearchOption.TopDirectoryOnly);
+        var modelDataList = new List<ModelData>(ggufFiles.Length);
+        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+
+        foreach (var file in ggufFiles)
+        {
+            var fileName = Path.GetFileName(file);
+            var existing = ModelRegistry.GetByFileName(fileName);
+            if (existing is not null)
+            {
+                modelDataList.Add(new ModelData
+                {
+                    Id = existing.Id,
+                    Created = now,
+                    OwnedBy = "main-inferpage"
+                });
+                continue;
+            }
+
+            var newModel = new GenericLocalModel(FileName: fileName);
+            ModelRegistry.RegisterOrReplace(newModel);
+            modelDataList.Add(new ModelData
+            {
+                Id = newModel.Id,
+                Created = now,
+                OwnedBy = "main-inferpage"
+            });
+        }
+
+        return new ModelListResponse { Data = modelDataList };
     }
 
     private static IResult ServerError(Exception ex) => Results.Json(
