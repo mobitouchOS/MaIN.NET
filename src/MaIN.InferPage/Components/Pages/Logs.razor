@@ -63,6 +63,7 @@
         <table class="logs-table">
             <thead>
                 <tr>
+                    <th style="width:28px"></th>
                     <th>Time</th>
                     <th>Method</th>
                     <th>Path</th>
@@ -74,12 +75,17 @@
                 @if (_filteredLogs.Count == 0)
                 {
                     <tr>
-                        <td colspan="5" class="logs-empty">No API calls logged yet. Make a request to <code>/v1/chat/completions</code> or <code>/v1/models</code> to see entries here.</td>
+                        <td colspan="6" class="logs-empty">No API calls logged yet. Make a request to <code>/v1/chat/completions</code> or <code>/v1/models</code> to see entries here.</td>
                     </tr>
                 }
                 @foreach (var entry in _filteredLogs)
                 {
-                    <tr>
+                    var isExpanded = _expandedId == entry.Id;
+                    <tr class="@(isExpanded ? "row-expanded" : "")"
+                        @onclick="@(() => ToggleEntry(entry.Id))">
+                        <td class="logs-toggle">
+                            <span class="toggle-icon">@(isExpanded ? "▼" : "▶")</span>
+                        </td>
                         <td class="logs-time">@entry.Timestamp.ToLocalTime().ToString("HH:mm:ss")</td>
                         <td><span class="method-badge method-@entry.Method.ToLowerInvariant()">@entry.Method</span></td>
                         <td class="logs-path">@entry.Path</td>
@@ -88,6 +94,29 @@
                         </td>
                         <td class="logs-duration">@(entry.DurationMs)ms</td>
                     </tr>
+                    @if (isExpanded)
+                    {
+                        <tr class="detail-row">
+                            <td colspan="6">
+                                <div class="detail-container">
+                                    @if (entry.RequestBody is not null)
+                                    {
+                                        <div class="detail-section">
+                                            <div class="detail-label">Request</div>
+                                            <pre class="detail-body">@entry.RequestBody</pre>
+                                        </div>
+                                    }
+                                    @if (entry.ResponseBody is not null)
+                                    {
+                                        <div class="detail-section">
+                                            <div class="detail-label">Response</div>
+                                            <pre class="detail-body">@entry.ResponseBody</pre>
+                                        </div>
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                    }
                 }
             </tbody>
         </table>
@@ -100,6 +129,7 @@
     private string? _filterPath;
     private string? _filterMinStatus;
     private string? _filterMaxStatus;
+    private string? _expandedId;
 
     private static readonly string[] _methodOptions = ["GET", "POST", "PUT", "DELETE", "PATCH"];
     private static readonly string[] _statusOptions = ["100", "200", "300", "400", "500"];
@@ -107,6 +137,11 @@
     protected override void OnInitialized()
     {
         ApplyFilters();
+    }
+
+    private void ToggleEntry(string id)
+    {
+        _expandedId = _expandedId == id ? null : id;
     }
 
     private void Refresh()
@@ -118,6 +153,7 @@
     {
         LogService.Clear();
         _filteredLogs = [];
+        _expandedId = null;
     }
 
     private void ApplyFilters()

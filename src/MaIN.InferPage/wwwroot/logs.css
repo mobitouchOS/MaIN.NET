@@ -77,12 +77,28 @@
     vertical-align: middle;
 }
 
-.logs-table tbody tr:hover {
+.logs-table tbody tr:not(.detail-row):hover {
+    background: var(--neutral-fill-hover);
+    cursor: pointer;
+}
+
+.logs-table tbody tr.row-expanded {
     background: var(--neutral-fill-hover);
 }
 
 .logs-table tbody tr:last-child td {
     border-bottom: none;
+}
+
+.logs-toggle {
+    padding: 8px 4px 8px 14px !important;
+    width: 28px;
+}
+
+.toggle-icon {
+    font-size: 10px;
+    color: var(--neutral-foreground-hint);
+    transition: transform 0.15s;
 }
 
 .logs-time {
@@ -96,7 +112,7 @@
     font-family: monospace;
     font-size: 12px;
     word-break: break-all;
-    max-width: 400px;
+    max-width: 350px;
 }
 
 .logs-duration {
@@ -116,6 +132,49 @@
 .logs-empty code {
     color: var(--accent-base-color);
     font-style: normal;
+}
+
+/* Expandable detail row */
+.detail-row td {
+    padding: 0 !important;
+    background: var(--neutral-layer-2);
+}
+
+.detail-container {
+    padding: 14px 14px 14px 42px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.detail-section {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.detail-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--accent-base-color);
+}
+
+.detail-body {
+    margin: 0;
+    padding: 10px 12px;
+    background: var(--neutral-layer-3);
+    border-radius: 6px;
+    font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--neutral-foreground-rest);
+    overflow-x: auto;
+    max-height: 300px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
 }
 
 /* Method badges */

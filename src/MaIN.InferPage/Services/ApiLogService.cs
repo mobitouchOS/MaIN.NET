@@ -10,17 +10,19 @@ public sealed class ApiLogEntry
     public int StatusCode { get; init; }
     public long DurationMs { get; init; }
     public DateTime Timestamp { get; init; }
+    public string? RequestBody { get; init; }
+    public string? ResponseBody { get; init; }
 }
 
 public sealed class ApiLogService
 {
-    private const int MaxEntries = 2000;
+    private const int MaxEntries = 500;
     private readonly ConcurrentQueue<ApiLogEntry> _entries = new();
 
     public void Add(ApiLogEntry entry)
     {
         _entries.Enqueue(entry);
-        if (_entries.Count > MaxEntries && _entries.TryDequeue(out _)) { }
+        while (_entries.Count > MaxEntries && _entries.TryDequeue(out _)) { }
     }
 
     public IReadOnlyList<ApiLogEntry> GetAll() => _entries.Reverse().ToList();

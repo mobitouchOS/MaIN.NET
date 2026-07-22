@@ -24,17 +24,40 @@ public static class ToolCallParser
 
         try
         {
-            var wrapper = JsonSerializer.Deserialize<ToolResponseWrapper>(jsonContent, JsonOptions);
+            using var doc = JsonDocument.Parse(jsonContent);
+            var root = doc.RootElement;
 
-            if (wrapper?.ToolCalls is not null && wrapper.ToolCalls.Count != 0)
-                return ToolParseResult.Success(NormalizeToolCalls(wrapper.ToolCalls));
+            if (root.ValueKind == JsonValueKind.Array)
+            {
+                // Mistral V3 / array-based format: [{"name":..., "arguments":...}]
+                var toolCalls = new List<ToolCall>();
+                foreach (var item in root.EnumerateArray())
+                {
+                    var singleCall = ParseSingleElement(item);
+                    if (singleCall is not null)
+                        toolCalls.Add(singleCall);
+                }
 
-            // Try parsing as a single tool call (Llama 3 / Mistral v3 / Phi-3.5 style)
-            var singleCall = TryParseSingleToolCall(jsonContent);
-            if (singleCall is not null)
-                return ToolParseResult.Success(new List<ToolCall> { singleCall });
+                if (toolCalls.Count > 0)
+                    return ToolParseResult.Success(toolCalls);
+            }
+            else if (root.ValueKind == JsonValueKind.Object)
+            {
+                // Standard format: {"tool_calls": [...]}
+                if (root.TryGetProperty("tool_calls", out var toolCallsEl) && toolCallsEl.ValueKind == JsonValueKind.Array)
+                {
+                    var wrapper = JsonSerializer.Deserialize<ToolResponseWrapper>(jsonContent, JsonOptions);
+                    if (wrapper?.ToolCalls is not null && wrapper.ToolCalls.Count != 0)
+                        return ToolParseResult.Success(NormalizeToolCalls(wrapper.ToolCalls));
+                }
 
-            return ToolParseResult.Failure("JSON parsed correctly but 'tool_calls' property is missing or empty.");
+                // Single tool call object: {"name":..., "arguments":...}
+                var singleCall = ParseSingleElement(root);
+                if (singleCall is not null)
+                    return ToolParseResult.Success(new List<ToolCall> { singleCall });
+            }
+
+            return ToolParseResult.Failure("JSON parsed correctly but no tool calls could be extracted.");
         }
         catch (JsonException ex)
         {
@@ -42,43 +65,30 @@ public static class ToolCallParser
         }
     }
 
-    private static ToolCall? TryParseSingleToolCall(string json)
+    private static ToolCall? ParseSingleElement(JsonElement element)
     {
-        try
+        if (element.ValueKind != JsonValueKind.Object || !element.TryGetProperty("name", out var nameEl))
+            return null;
+
+        var name = nameEl.GetString();
+        if (string.IsNullOrEmpty(name))
+            return null;
+
+        string arguments = "{}";
+        if (element.TryGetProperty("arguments", out var argsEl))
         {
-            using var doc = JsonDocument.Parse(json);
-            var root = doc.RootElement;
-
-            // Llama 3 / Mistral v3 / Phi-3.5 format: {"name": "...", "arguments": {...}}
-            if (root.ValueKind == JsonValueKind.Object && root.TryGetProperty("name", out var nameEl))
-            {
-                var name = nameEl.GetString();
-                if (string.IsNullOrEmpty(name))
-                    return null;
-
-                string arguments = "{}";
-                if (root.TryGetProperty("arguments", out var argsEl))
-                {
-                    // arguments can be an object (Llama 3, Mistral v3) or a string (Phi-3.5)
-                    if (argsEl.ValueKind == JsonValueKind.String)
-                        arguments = argsEl.GetString() ?? "{}";
-                    else
-                        arguments = argsEl.GetRawText();
-                }
-
-                return new ToolCall
-                {
-                    Id = Guid.NewGuid().ToString()[..8],
-                    Type = "function",
-                    Function = new FunctionCall { Name = name, Arguments = arguments }
-                };
-            }
+            if (argsEl.ValueKind == JsonValueKind.String)
+                arguments = argsEl.GetString() ?? "{}";
+            else
+                arguments = argsEl.GetRawText();
         }
-        catch
+
+        return new ToolCall
         {
-            // Fall through to return null
-        }
-        return null;
+            Id = Guid.NewGuid().ToString()[..8],
+            Type = "function",
+            Function = new FunctionCall { Name = name, Arguments = arguments }
+        };
     }
 
     private static string? ExtractJsonContent(string text, ToolFormatDetector.ToolCallFormat format)
