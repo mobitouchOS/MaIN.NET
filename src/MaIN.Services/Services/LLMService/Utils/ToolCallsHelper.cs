@@ -12,24 +12,52 @@ public static class ToolCallParser
         PropertyNameCaseInsensitive = true,
     };
 
-    public static ToolParseResult ParseToolCalls(string response)
+    public static ToolParseResult ParseToolCalls(string response, ToolFormatDetector.ToolCallFormat format = ToolFormatDetector.ToolCallFormat.HermesJson)
     {
         if (string.IsNullOrWhiteSpace(response))
             return ToolParseResult.Failure("Response is empty.");
 
-        var jsonContent = ExtractJsonContent(response);
+        var jsonContent = ExtractJsonContent(response, format);
 
         if (string.IsNullOrEmpty(jsonContent))
             return ToolParseResult.ToolNotFound();
 
         try
         {
-            var wrapper = JsonSerializer.Deserialize<ToolResponseWrapper>(jsonContent, JsonOptions);
+            using var doc = JsonDocument.Parse(jsonContent);
+            var root = doc.RootElement;
 
-            if (wrapper?.ToolCalls is not null && wrapper.ToolCalls.Count != 0)
-                return ToolParseResult.Success(NormalizeToolCalls(wrapper.ToolCalls));
+            if (root.ValueKind == JsonValueKind.Array)
+            {
+                // Mistral V3 / array-based format: [{"name":..., "arguments":...}]
+                var toolCalls = new List<ToolCall>();
+                foreach (var item in root.EnumerateArray())
+                {
+                    var singleCall = ParseSingleElement(item);
+                    if (singleCall is not null)
+                        toolCalls.Add(singleCall);
+                }
 
-            return ToolParseResult.Failure("JSON parsed correctly but 'tool_calls' property is missing or empty.");
+                if (toolCalls.Count > 0)
+                    return ToolParseResult.Success(toolCalls);
+            }
+            else if (root.ValueKind == JsonValueKind.Object)
+            {
+                // Standard format: {"tool_calls": [...]}
+                if (root.TryGetProperty("tool_calls", out var toolCallsEl) && toolCallsEl.ValueKind == JsonValueKind.Array)
+                {
+                    var wrapper = JsonSerializer.Deserialize<ToolResponseWrapper>(jsonContent, JsonOptions);
+                    if (wrapper?.ToolCalls is not null && wrapper.ToolCalls.Count != 0)
+                        return ToolParseResult.Success(NormalizeToolCalls(wrapper.ToolCalls));
+                }
+
+                // Single tool call object: {"name":..., "arguments":...}
+                var singleCall = ParseSingleElement(root);
+                if (singleCall is not null)
+                    return ToolParseResult.Success(new List<ToolCall> { singleCall });
+            }
+
+            return ToolParseResult.Failure("JSON parsed correctly but no tool calls could be extracted.");
         }
         catch (JsonException ex)
         {
@@ -37,16 +65,107 @@ public static class ToolCallParser
         }
     }
 
-    private static string? ExtractJsonContent(string text)
+    private static ToolCall? ParseSingleElement(JsonElement element)
+    {
+        if (element.ValueKind != JsonValueKind.Object || !element.TryGetProperty("name", out var nameEl))
+            return null;
+
+        var name = nameEl.GetString();
+        if (string.IsNullOrEmpty(name))
+            return null;
+
+        string arguments = "{}";
+        if (element.TryGetProperty("arguments", out var argsEl))
+        {
+            if (argsEl.ValueKind == JsonValueKind.String)
+                arguments = argsEl.GetString() ?? "{}";
+            else
+                arguments = argsEl.GetRawText();
+        }
+
+        return new ToolCall
+        {
+            Id = Guid.NewGuid().ToString()[..8],
+            Type = "function",
+            Function = new FunctionCall { Name = name, Arguments = arguments }
+        };
+    }
+
+    private static string? ExtractJsonContent(string text, ToolFormatDetector.ToolCallFormat format)
     {
         if (string.IsNullOrWhiteSpace(text))
             return null;
 
         text = text.Trim();
 
-        return ExtractFromCodeBlock(text)
-               ?? FindBalancedJson(text)
-               ?? ExtractPartialJson(text);
+        return format switch
+        {
+            ToolFormatDetector.ToolCallFormat.Granite => ExtractFromGraniteFormat(text),
+            ToolFormatDetector.ToolCallFormat.Llama3 => ExtractFromLlama3Format(text),
+            ToolFormatDetector.ToolCallFormat.MistralV3 => ExtractFromMistralV3Format(text),
+            ToolFormatDetector.ToolCallFormat.Phi3 => ExtractFromPhi3Format(text),
+            _ => ExtractFromCodeBlock(text) ?? FindBalancedJson(text) ?? ExtractPartialJson(text)
+        };
+    }
+
+    private static string? ExtractFromGraniteFormat(string text)
+    {
+        // IBM Granite format: <tool_call>{"name":..., "arguments":...}</tool_call>
+        // The JSON inside is a single object, not wrapped in a tool_calls array
+        var toolCallMatch = System.Text.RegularExpressions.Regex.Match(
+            text, @"<tool_call>\s*(\{.*?\})\s*</tool_call>",
+            System.Text.RegularExpressions.RegexOptions.Singleline);
+        if (toolCallMatch.Success)
+            return toolCallMatch.Groups[1].Value;
+
+        // Fallback to generic extraction
+        return ExtractFromCodeBlock(text) ?? FindBalancedJson(text) ?? ExtractPartialJson(text);
+    }
+
+    private static string? ExtractFromLlama3Format(string text)
+    {
+        // Llama 3 format: <functioncall>{"name":..., "arguments":...}</functioncall>
+        // or <|python_tag|>{...}
+        var functionCallMatch = System.Text.RegularExpressions.Regex.Match(
+            text, @"<functioncall>\s*(\{.*?\})\s*</functioncall>",
+            System.Text.RegularExpressions.RegexOptions.Singleline);
+        if (functionCallMatch.Success)
+            return functionCallMatch.Groups[1].Value;
+
+        var pythonTagMatch = System.Text.RegularExpressions.Regex.Match(
+            text, @"<\|python_tag\|>\s*(\{.*\})",
+            System.Text.RegularExpressions.RegexOptions.Singleline);
+        if (pythonTagMatch.Success)
+            return pythonTagMatch.Groups[1].Value;
+
+        // Fallback to generic extraction
+        return ExtractFromCodeBlock(text) ?? FindBalancedJson(text) ?? ExtractPartialJson(text);
+    }
+
+    private static string? ExtractFromMistralV3Format(string text)
+    {
+        // Mistral v3 format: [TOOL_CALLS][{"name":..., "arguments":...}]
+        var toolCallsMatch = System.Text.RegularExpressions.Regex.Match(
+            text, @"\[TOOL_CALLS\]\s*(\[.*?\])",
+            System.Text.RegularExpressions.RegexOptions.Singleline);
+        if (toolCallsMatch.Success)
+            return toolCallsMatch.Groups[1].Value;
+
+        // Fallback to generic extraction
+        return ExtractFromCodeBlock(text) ?? FindBalancedJson(text) ?? ExtractPartialJson(text);
+    }
+
+    private static string? ExtractFromPhi3Format(string text)
+    {
+        // Phi-3.5 format: <|tool_call|>{"name":..., "arguments":...}<|/tool_call|>
+        var toolCallMatch = System.Text.RegularExpressions.Regex.Match(
+            text, @"<\|tool_call\|>\s*(\{.*?\})\s*<\|/tool_call\|>",
+            System.Text.RegularExpressions.RegexOptions.Singleline);
+        if (toolCallMatch.Success)
+            return toolCallMatch.Groups[1].Value;
+
+        // Fallback to generic extraction
+        return ExtractFromCodeBlock(text) ?? FindBalancedJson(text) ?? ExtractPartialJson(text);
     }
 
     private static string? ExtractFromCodeBlock(string text)

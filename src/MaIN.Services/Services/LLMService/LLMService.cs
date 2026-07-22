@@ -431,20 +431,38 @@ public class LLMService : ILLMService
 
             foreach (var messageToProcess in messagesToProcess)
             {
-                template.Add(messageToProcess.Role, messageToProcess.Content);
+                AddMessageToTemplate(template, messageToProcess);
             }
         }
+        // When !isNewConversation with tools, the sequence state is already loaded from
+        // chat.ConversationState by InitializeConversation. Re-adding all prior messages
+        // here would duplicate-prompt the entire history and corrupt the KV cache.
+        // Only the new tool result message (lastMsg) needs to be appended below.
 
         if (hasTools && isNewConversation)
         {
-            var toolsPrompt = FormatToolsForPrompt(chat.ToolsConfiguration!);
-            finalPrompt = $"{toolsPrompt}\n\n{finalPrompt}";
+            var format = ToolFormatDetector.DetectFormat(model);
+            var toolsPrompt = FormatToolsForPrompt(chat.ToolsConfiguration!, format);
+
+            if (!chat.Properties.ContainsKey(ServiceConstants.Properties.ToolsFormattedProperty))
+            {
+                var firstUserMsg = chat.Messages.FirstOrDefault(m => m.Role == ServiceConstants.Roles.User);
+                if (firstUserMsg is not null)
+                {
+                    firstUserMsg.Content = $"{toolsPrompt}\n\n{firstUserMsg.Content}";
+                }
+
+                chat.Properties[ServiceConstants.Properties.ToolsFormattedProperty] = "true";
+            }
         }
 
-        template.Add(ServiceConstants.Roles.User, finalPrompt);
+        // Add the last message using the same role-normalisation as the new-conversation path
+        // so that the chat template output is identical regardless of conversation state.
+        AddMessageToTemplate(template, lastMsg, overrideContent: finalPrompt);
         template.AddAssistant = true;
 
         var templatedMessage = Encoding.UTF8.GetString(template.Apply());
+        
         var tokens = isNewConversation
             ? executor.Context.Tokenize(templatedMessage, addBos: true, special: true)
             : executor.Context.Tokenize(templatedMessage);
@@ -452,9 +470,32 @@ public class LLMService : ILLMService
         conversation.Prompt(tokens);
     }
 
-    private static string FormatToolsForPrompt(ToolsConfiguration toolsConfig)
+    /// <summary>
+    /// Adds a message to the chat template, normalising tool-result messages to user-role
+    /// with a "[Tool Result]:" prefix. Centralised here so the fresh-conversation path
+    /// and the restored-conversation path produce identical template output.
+    /// </summary>
+    private static void AddMessageToTemplate(LLamaTemplate template, Message message, string? overrideContent = null)
+    {
+        var content = overrideContent ?? message.Content;
+
+        if (message.Role == ServiceConstants.Roles.Tool)
+        {
+            // Most chat templates only support system/user/assistant roles. Tool-result
+            // messages are mapped to the user role with an explicit prefix so the model
+            // can distinguish them from ordinary user input.
+            template.Add(ServiceConstants.Roles.User, $"[Tool Result]: {content}");
+        }
+        else
+        {
+            template.Add(message.Role, content);
+        }
+    }
+
+    private static string FormatToolsForPrompt(ToolsConfiguration toolsConfig, ToolFormatDetector.ToolCallFormat format)
     {
         var toolsList = new StringBuilder();
+        var toolsJsonList = new StringBuilder();
         foreach (var tool in toolsConfig.Tools)
         {
             if (tool.Function == null)
@@ -464,21 +505,102 @@ public class LLMService : ILLMService
 
             toolsList.AppendLine($"- {tool.Function.Name}: {tool.Function.Description}");
             toolsList.AppendLine($"  Parameters: {JsonSerializer.Serialize(tool.Function.Parameters)}");
+
+            // For Granite format, use JSON-formatted tool definitions
+            if (format == ToolFormatDetector.ToolCallFormat.Granite)
+            {
+                var toolJson = new
+                {
+                    type = "function",
+                    function = new
+                    {
+                        name = tool.Function.Name,
+                        description = tool.Function.Description,
+                        parameters = tool.Function.Parameters
+                    }
+                };
+                toolsJsonList.AppendLine(JsonSerializer.Serialize(toolJson));
+            }
         }
 
-        return $$$"""
-             ## TOOLS
-             You can call these tools if needed. To call a tool, respond with a JSON object inside <tool_call> tags.
+        var toolsContent = format == ToolFormatDetector.ToolCallFormat.Granite
+            ? toolsJsonList.ToString().TrimEnd()
+            : toolsList.ToString().TrimEnd();
 
-             {{{toolsList}}}
+        return format switch
+        {
+            ToolFormatDetector.ToolCallFormat.HermesJson => $$$"""
+                 ## TOOLS
+                 You can call these tools if needed. To call a tool, respond with a JSON object inside <tool_call> tags.
 
-             ## RESPONSE FORMAT (YOU HAVE TO CHOOSE ONE FORMAT AND CANNOT MIX THEM)##
-             1. For normal conversation, just respond with plain text.
-             2. For tool calls, use this format. You cannot respond with plain text before or after format. If you want to call multiple functions, you have to combine them into one array. Your response MUST contain only one tool call block:
-             <tool_call>
-             {"tool_calls": [{"id": "call_1", "type": "function", "function": {"name": "tool_name", "arguments": "{\"param\":\"value\"}"}},{"id": "call_2", "type": "function", "function": {"name": "tool2_name", "arguments": "{\"param1\":\"value1\",\"param2\":\"value2\"}"}}]}
-             </tool_call>
-             """;
+                 {{{toolsList}}}
+
+                 ## RESPONSE FORMAT (YOU HAVE TO CHOOSE ONE FORMAT AND CANNOT MIX THEM)##
+                 1. For normal conversation, just respond with plain text.
+                 2. For tool calls, use this format. You cannot respond with plain text before or after format. If you want to call multiple functions, you have to combine them into one array. Your response MUST contain only one tool call block:
+                 <tool_call>
+                 {"tool_calls": [{"id": "call_1", "type": "function", "function": {"name": "tool_name", "arguments": "{\"param\":\"value\"}"}},{"id": "call_2", "type": "function", "function": {"name": "tool2_name", "arguments": "{\"param1\":\"value1\",\"param2\":\"value2\"}"}}]}
+                 </tool_call>
+                 """,
+            ToolFormatDetector.ToolCallFormat.Granite => $$$"""
+                 You are a helpful assistant with access to the following tools. You may call one or more tools to assist with the user query.
+
+                 You are provided with function signatures within <tools></tools> XML tags:
+                 <tools>
+                 {{{toolsContent}}}
+                 </tools>
+
+                 For each tool call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:
+                 <tool_call>
+                 {"name": "function_name", "arguments": {"param": "value"}}
+                 </tool_call>. If a tool does not exist in the provided list of tools, notify the user that you do not have the ability to fulfill the request.
+                 """,
+            ToolFormatDetector.ToolCallFormat.Llama3 => $$$"""
+                 ## TOOLS
+                 You can call these tools if needed. To call a tool, respond with a JSON object.
+
+                 {{{toolsList}}}
+
+                 ## RESPONSE FORMAT ##
+                 1. For normal conversation, just respond with plain text.
+                 2. For tool calls, use this exact format with <functioncall> tags:
+                 <functioncall>
+                 {"name": "tool_name", "arguments": {"param": "value"}}
+                 </functioncall>
+                 """,
+            ToolFormatDetector.ToolCallFormat.MistralV3 => $$$"""
+                 [AVAILABLE_TOOLS]
+                 {{{toolsList}}}
+                 [/AVAILABLE_TOOLS]
+
+                 ## RESPONSE FORMAT ##
+                 1. For normal conversation, just respond with plain text.
+                 2. For tool calls, use this exact format:
+                 [TOOL_CALLS][{"name": "tool_name", "arguments": {"param": "value"}}]
+                 """,
+            ToolFormatDetector.ToolCallFormat.Phi3 => $$$"""
+                 ## TOOLS
+                 You can call these tools if needed.
+
+                 {{{toolsList}}}
+
+                 ## RESPONSE FORMAT ##
+                 1. For normal conversation, just respond with plain text.
+                 2. For tool calls, use this exact format:
+                 <|tool_call|>
+                 {"name": "tool_name", "arguments": {"param": "value"}}
+                 <|/tool_call|>
+                 """,
+            _ => $$$"""
+                 ## TOOLS
+                 You can call these tools if needed.
+
+                 {{{toolsList}}}
+
+                 ## RESPONSE FORMAT ##
+                 Respond with a tool call in JSON format.
+                 """
+        };
     }
 
     private async Task<(List<LLMTokenValue> Tokens, bool IsComplete, bool HasFailed)> ProcessTokens(
@@ -687,12 +809,9 @@ public class LLMService : ILLMService
         ChatRequestOptions requestOptions,
         CancellationToken cancellationToken)
     {
-        var model = ModelRegistry.GetById(chat.ModelId);
-        if (model is not LocalModel localModel)
-        {
-            throw new InvalidModelTypeException(nameof(LocalModel));
-        }
+        var localModel = GetLocalModel(chat);
 
+        var toolFormat = ToolFormatDetector.DetectFormat(localModel);
         var iterations = 0;
         var lastResponseTokens = new List<LLMTokenValue>();
         var lastResponse = string.Empty;
@@ -715,7 +834,7 @@ public class LLMService : ILLMService
             };
             chat.Messages.Add(responseMessage.MarkProcessed());
 
-            var parseResult = ToolCallParser.ParseToolCalls(lastResponse);
+            var parseResult = ToolCallParser.ParseToolCalls(lastResponse, toolFormat);
 
             // Tool not found or invalid JSON
             if (!parseResult.IsSuccess)
@@ -819,7 +938,7 @@ public class LLMService : ILLMService
 
                     var toolMessage = new Message
                     {
-                        Content = $"Tool result for {toolCall.Function.Name}: {toolResult}",
+                        Content = $"{toolResult}\n\nNow provide a final answer to the user based on this tool result.",
                         Role = ServiceConstants.Roles.Tool,
                         Type = MessageType.LocalLLM,
                         Tool = true
@@ -833,7 +952,7 @@ public class LLMService : ILLMService
                     var errorResult = JsonSerializer.Serialize(new { error = ex.Message });
                     var toolMessage = new Message
                     {
-                        Content = $"Tool error for {toolCall.Function.Name}: {errorResult}",
+                        Content = $"Tool error: {errorResult}\n\nNow provide a final answer to the user based on this error.",
                         Role = ServiceConstants.Roles.Tool,
                         Type = MessageType.LocalLLM,
                         Tool = true

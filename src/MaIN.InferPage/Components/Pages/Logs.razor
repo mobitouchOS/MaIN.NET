@@ -1,0 +1,173 @@
+@page "/logs"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@using MaIN.InferPage.Services
+@inject ApiLogService LogService
+
+<link rel="stylesheet" href="logs.css">
+
+<PageTitle>API Logs — MaIN Infer</PageTitle>
+
+<div class="logs-page">
+    <div class="logs-header">
+        <h2>API Logs</h2>
+        <div class="logs-actions">
+            <FluentButton Appearance="Appearance.Accent"
+                          OnClick="@Refresh">
+                Refresh
+            </FluentButton>
+            <FluentButton Appearance="Appearance.Lightweight"
+                          OnClick="@ClearLogs">
+                Clear
+            </FluentButton>
+        </div>
+    </div>
+
+    <div class="logs-filters">
+        <div class="filter-field">
+            <label class="filter-label">Method</label>
+            <FluentSelect TOption="string"
+                          Items="@_methodOptions"
+                          @bind-SelectedOption="_filterMethod"
+                          @bind-SelectedOption:after="ApplyFilters"
+                          Placeholder="All"
+                          Style="width: 120px;" />
+        </div>
+        <div class="filter-field">
+            <label class="filter-label">Path contains</label>
+            <FluentTextField @bind-Value="_filterPath"
+                             @bind-Value:after="ApplyFilters"
+                             Placeholder="/v1/..."
+                             Style="width: 220px;" />
+        </div>
+        <div class="filter-field">
+            <label class="filter-label">Min status</label>
+            <FluentSelect TOption="string"
+                          Items="@_statusOptions"
+                          @bind-SelectedOption="_filterMinStatus"
+                          @bind-SelectedOption:after="ApplyFilters"
+                          Placeholder="Any"
+                          Style="width: 110px;" />
+        </div>
+        <div class="filter-field">
+            <label class="filter-label">Max status</label>
+            <FluentSelect TOption="string"
+                          Items="@_statusOptions"
+                          @bind-SelectedOption="_filterMaxStatus"
+                          @bind-SelectedOption:after="ApplyFilters"
+                          Placeholder="Any"
+                          Style="width: 110px;" />
+        </div>
+    </div>
+
+    <div class="logs-table-wrapper">
+        <table class="logs-table">
+            <thead>
+                <tr>
+                    <th style="width:28px"></th>
+                    <th>Time</th>
+                    <th>Method</th>
+                    <th>Path</th>
+                    <th>Status</th>
+                    <th>Duration</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (_filteredLogs.Count == 0)
+                {
+                    <tr>
+                        <td colspan="6" class="logs-empty">No API calls logged yet. Make a request to <code>/v1/chat/completions</code> or <code>/v1/models</code> to see entries here.</td>
+                    </tr>
+                }
+                @foreach (var entry in _filteredLogs)
+                {
+                    var isExpanded = _expandedId == entry.Id;
+                    <tr class="@(isExpanded ? "row-expanded" : "")"
+                        @onclick="@(() => ToggleEntry(entry.Id))">
+                        <td class="logs-toggle">
+                            <span class="toggle-icon">@(isExpanded ? "▼" : "▶")</span>
+                        </td>
+                        <td class="logs-time">@entry.Timestamp.ToLocalTime().ToString("HH:mm:ss")</td>
+                        <td><span class="method-badge method-@entry.Method.ToLowerInvariant()">@entry.Method</span></td>
+                        <td class="logs-path">@entry.Path</td>
+                        <td>
+                            <span class="status-badge status-@(entry.StatusCode / 100)xx">@entry.StatusCode</span>
+                        </td>
+                        <td class="logs-duration">@(entry.DurationMs)ms</td>
+                    </tr>
+                    @if (isExpanded)
+                    {
+                        <tr class="detail-row">
+                            <td colspan="6">
+                                <div class="detail-container">
+                                    @if (entry.RequestBody is not null)
+                                    {
+                                        <div class="detail-section">
+                                            <div class="detail-label">Request</div>
+                                            <pre class="detail-body">@entry.RequestBody</pre>
+                                        </div>
+                                    }
+                                    @if (entry.ResponseBody is not null)
+                                    {
+                                        <div class="detail-section">
+                                            <div class="detail-label">Response</div>
+                                            <pre class="detail-body">@entry.ResponseBody</pre>
+                                        </div>
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@code {
+    private List<ApiLogEntry> _filteredLogs = [];
+    private string? _filterMethod;
+    private string? _filterPath;
+    private string? _filterMinStatus;
+    private string? _filterMaxStatus;
+    private string? _expandedId;
+
+    private static readonly string[] _methodOptions = ["GET", "POST", "PUT", "DELETE", "PATCH"];
+    private static readonly string[] _statusOptions = ["100", "200", "300", "400", "500"];
+
+    protected override void OnInitialized()
+    {
+        ApplyFilters();
+    }
+
+    private void ToggleEntry(string id)
+    {
+        _expandedId = _expandedId == id ? null : id;
+    }
+
+    private void Refresh()
+    {
+        ApplyFilters();
+    }
+
+    private void ClearLogs()
+    {
+        LogService.Clear();
+        _filteredLogs = [];
+        _expandedId = null;
+    }
+
+    private void ApplyFilters()
+    {
+        int? minStatus = int.TryParse(_filterMinStatus, out var min) ? min : null;
+        int? maxStatus = int.TryParse(_filterMaxStatus, out var max) ? max : null;
+
+        if (string.IsNullOrWhiteSpace(_filterMethod) && string.IsNullOrWhiteSpace(_filterPath) && !minStatus.HasValue && !maxStatus.HasValue)
+        {
+            _filteredLogs = [.. LogService.GetAll()];
+        }
+        else
+        {
+            _filteredLogs = [.. LogService.GetFiltered(_filterMethod, _filterPath, minStatus, maxStatus)];
+        }
+    }
+}

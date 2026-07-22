@@ -1,8 +1,10 @@
 using System.Text.Json;
 using MaIN.Core.Hub;
 using MaIN.Core.Hub.Utils;
+using MaIN.Domain.Configuration;
 using MaIN.Domain.Entities.Tools;
 using MaIN.Domain.Models.Abstract;
+using MaIN.Domain.Models.Concrete;
 using MaIN.Services.Services.Models;
 using MaIN.Services.Services.LLMService.Utils;
 
@@ -10,6 +12,64 @@ namespace MaIN.InferPage.Endpoints;
 
 public static class OpenAiCompatEndpoints
 {
+    private static ModelListResponse? _cachedModelsResponse;
+
+    public static void InitializeModelCache()
+    {
+        if (Utils.BackendType != BackendType.Self)
+        {
+            _cachedModelsResponse = new ModelListResponse
+            {
+                Data = string.IsNullOrEmpty(Utils.Model)
+                    ? []
+                    : [new ModelData { Id = Utils.Model, Created = DateTimeOffset.UtcNow.ToUnixTimeSeconds() }]
+            };
+            return;
+        }
+
+        var modelsDir = !string.IsNullOrEmpty(Utils.Path)
+            ? Utils.Path
+            : Utils.DefaultModelsPath;
+
+        if (!Directory.Exists(modelsDir))
+        {
+            _cachedModelsResponse = new ModelListResponse { Data = [] };
+            return;
+        }
+
+        var ggufFiles = Directory.GetFiles(modelsDir, "*.gguf", SearchOption.TopDirectoryOnly);
+        var modelDataList = new List<ModelData>(ggufFiles.Length);
+        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+
+        foreach (var file in ggufFiles)
+        {
+            var fileName = Path.GetFileName(file);
+
+            var existing = ModelRegistry.GetByFileName(fileName);
+            if (existing is not null)
+            {
+                modelDataList.Add(new ModelData
+                {
+                    Id = existing.Id,
+                    Created = now,
+                    OwnedBy = "main-inferpage"
+                });
+                continue;
+            }
+
+            var newModel = new GenericLocalModel(FileName: fileName);
+            ModelRegistry.RegisterOrReplace(newModel);
+            modelDataList.Add(new ModelData
+            {
+                Id = newModel.Id,
+                Created = now,
+                OwnedBy = "main-inferpage"
+            });
+        }
+
+        _cachedModelsResponse = new ModelListResponse { Data = modelDataList };
+    }
+
     public static void MapOpenAiCompatEndpoints(this WebApplication app)
     {
         app.MapGet("/v1/models", (HttpRequest request) =>
@@ -19,18 +79,24 @@ public static class OpenAiCompatEndpoints
                 return Results.Json(authError, OpenAiJsonOptions.Options, statusCode: StatusCodes.Status401Unauthorized);
             }
 
-            var response = new ModelListResponse
+            var response = _cachedModelsResponse;
+            if (response is null)
             {
-                Data = string.IsNullOrEmpty(Utils.Model)
-                    ? []
-                    : [new ModelData { Id = Utils.Model, Created = DateTimeOffset.UtcNow.ToUnixTimeSeconds() }]
-            };
+                response = Utils.BackendType != BackendType.Self
+                    ? new ModelListResponse
+                    {
+                        Data = string.IsNullOrEmpty(Utils.Model)
+                            ? []
+                            : [new ModelData { Id = Utils.Model, Created = DateTimeOffset.UtcNow.ToUnixTimeSeconds() }]
+                    }
+                    : BuildSelfModelsResponse();
+            }
 
             return Results.Json(response, OpenAiJsonOptions.Options);
         })
         .WithName("ListModels")
         .WithTags("OpenAI-Compatible API")
-        .WithSummary("Lists the model this InferPage instance is currently serving.")
+        .WithSummary("Lists available models. Populated at startup from the models directory.")
         .Produces<ModelListResponse>()
         .Produces<OpenAiErrorResponse>(StatusCodes.Status401Unauthorized);
 
@@ -245,6 +311,87 @@ public static class OpenAiCompatEndpoints
         Error = new OpenAiError { Message = ex.Message, Type = "server_error" }
     };
 
+    /// <summary>
+    /// Checks if the tool type is an OpenAI hosted tool (not a function).
+    /// OpenAI hosted tools have a type like "web_search_preview" without a function object.
+    /// </summary>
+    private static bool IsOpenAiHostedTool(string type)
+    {
+        if (string.IsNullOrEmpty(type))
+            return false;
+
+        var normalized = type.Trim().ToLowerInvariant();
+
+        return normalized switch
+        {
+            "web_search_preview" or "web_search" or "search_web" => true,
+            "file_search" => true,
+            "code_interpreter" => true,
+            "computer_use" or "computer_use_preview" => true,
+            _ => false
+        };
+    }
+
+    /// <summary>
+    /// Maps OpenAI hosted tool type names to our internal tool names.
+    /// </summary>
+    private static string MapOpenAiHostedToolName(string openAiType)
+    {
+        var normalized = openAiType.Trim().ToLowerInvariant();
+
+        return normalized switch
+        {
+            "web_search_preview" or "web_search" or "search_web" => "web_search",
+            "file_search" => "file_search",
+            "code_interpreter" => "code_interpreter",
+            "computer_use" or "computer_use_preview" => "computer_use",
+            _ => openAiType
+        };
+    }
+
+    private static ModelListResponse BuildSelfModelsResponse()
+    {
+        var modelsDir = !string.IsNullOrEmpty(Utils.Path)
+            ? Utils.Path
+            : Utils.DefaultModelsPath;
+
+        if (!Directory.Exists(modelsDir))
+        {
+            return new ModelListResponse { Data = [] };
+        }
+
+        var ggufFiles = Directory.GetFiles(modelsDir, "*.gguf", SearchOption.TopDirectoryOnly);
+        var modelDataList = new List<ModelData>(ggufFiles.Length);
+        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+
+        foreach (var file in ggufFiles)
+        {
+            var fileName = Path.GetFileName(file);
+            var existing = ModelRegistry.GetByFileName(fileName);
+            if (existing is not null)
+            {
+                modelDataList.Add(new ModelData
+                {
+                    Id = existing.Id,
+                    Created = now,
+                    OwnedBy = "main-inferpage"
+                });
+                continue;
+            }
+
+            var newModel = new GenericLocalModel(FileName: fileName);
+            ModelRegistry.RegisterOrReplace(newModel);
+            modelDataList.Add(new ModelData
+            {
+                Id = newModel.Id,
+                Created = now,
+                OwnedBy = "main-inferpage"
+            });
+        }
+
+        return new ModelListResponse { Data = modelDataList };
+    }
+
     private static IResult ServerError(Exception ex) => Results.Json(
         ErrorResponse(ex),
         OpenAiJsonOptions.Options,
@@ -341,13 +488,30 @@ public static class OpenAiCompatEndpoints
         CancellationToken ct)
     {
         var httpClientFactory = response.HttpContext.RequestServices.GetService<IHttpClientFactory>();
+        var configuration = response.HttpContext.RequestServices.GetService<IConfiguration>();
+        var searxngBaseUrl = configuration?["MaIN:SearxngBaseUrl"] ?? Environment.GetEnvironmentVariable("MaIN__SearxngBaseUrl");
         var toolsBuilder = new ToolsConfigurationBuilder();
         bool hasServerSideTools = false;
 
         foreach (var tool in request.Tools!)
         {
+            // OpenAI hosted tools detection: they have a type like "web_search_preview" without a function object
+            var isOpenAiHostedTool = IsOpenAiHostedTool(tool.Type);
             var toolNameOrType = tool.Function?.Name ?? tool.Type;
-            if (HostedToolsResolver.TryResolveBuiltInTool(toolNameOrType, httpClientFactory, out var builtInTool))
+
+            if (isOpenAiHostedTool)
+            {
+                // Map OpenAI hosted tool types to our internal tool names
+                var internalToolName = MapOpenAiHostedToolName(tool.Type);
+                if (HostedToolsResolver.TryResolveBuiltInTool(internalToolName, httpClientFactory, out var builtInTool, searxngBaseUrl))
+                {
+                    builtInTool.Type = tool.Type;
+                    builtInTool.IsClientSide = false;
+                    toolsBuilder.AddTool(builtInTool);
+                    hasServerSideTools = true;
+                }
+            }
+            else if (HostedToolsResolver.TryResolveBuiltInTool(toolNameOrType, httpClientFactory, out var builtInTool, searxngBaseUrl))
             {
                 builtInTool.Type = tool.Type;
                 builtInTool.IsClientSide = false;
@@ -549,13 +713,15 @@ public static class OpenAiCompatEndpoints
         CancellationToken ct)
     {
         var httpClientFactory = response.HttpContext.RequestServices.GetService<IHttpClientFactory>();
+        var configuration = response.HttpContext.RequestServices.GetService<IConfiguration>();
+        var searxngBaseUrl = configuration?["MaIN:SearxngBaseUrl"] ?? Environment.GetEnvironmentVariable("MaIN__SearxngBaseUrl");
         var toolsBuilder = new ToolsConfigurationBuilder();
         bool hasServerSideTools = false;
 
         foreach (var tool in request.Tools!)
         {
             var toolNameOrType = tool.Function?.Name ?? tool.Type;
-            if (HostedToolsResolver.TryResolveBuiltInTool(toolNameOrType, httpClientFactory, out var builtInTool))
+            if (HostedToolsResolver.TryResolveBuiltInTool(toolNameOrType, httpClientFactory, out var builtInTool, searxngBaseUrl))
             {
                 builtInTool.Type = tool.Type;
                 builtInTool.IsClientSide = false;

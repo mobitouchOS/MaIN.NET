@@ -20,7 +20,7 @@ public static class WebSearchTool
         return client;
     }
 
-    public static ToolDefinition Create(IHttpClientFactory? httpClientFactory = null, string toolName = Name, CancellationToken ct = default)
+    public static ToolDefinition Create(IHttpClientFactory? httpClientFactory = null, string toolName = Name, string? searxngBaseUrl = null, CancellationToken ct = default)
     {
         return new ToolDefinition
         {
@@ -47,11 +47,11 @@ public static class WebSearchTool
                     required = new[] { "query" }
                 }
             },
-            Execute = argsJson => ExecuteAsync(httpClientFactory, argsJson, ct)
+            Execute = argsJson => ExecuteAsync(httpClientFactory, argsJson, searxngBaseUrl, ct)
         };
     }
 
-    private static async Task<string> ExecuteAsync(IHttpClientFactory? httpClientFactory, string argsJson, CancellationToken ct)
+    private static async Task<string> ExecuteAsync(IHttpClientFactory? httpClientFactory, string argsJson, string? searxngBaseUrl, CancellationToken ct)
     {
         var query = ExtractQuery(argsJson);
         if (string.IsNullOrWhiteSpace(query))
@@ -59,6 +59,83 @@ public static class WebSearchTool
             return "Error: Empty search query provided.";
         }
 
+        // Prefer SearXNG if configured; fall back to DuckDuckGo HTML scraping
+        if (!string.IsNullOrWhiteSpace(searxngBaseUrl))
+        {
+            return await ExecuteSearxngAsync(httpClientFactory, query, searxngBaseUrl, ct);
+        }
+
+        return await ExecuteDuckDuckGoAsync(httpClientFactory, query, ct);
+    }
+
+    private static async Task<string> ExecuteSearxngAsync(IHttpClientFactory? httpClientFactory, string query, string searxngBaseUrl, CancellationToken ct)
+    {
+        try
+        {
+            var client = httpClientFactory?.CreateClient() ?? s_defaultHttpClient;
+            var baseUrl = searxngBaseUrl.TrimEnd('/');
+            var requestUrl = $"{baseUrl}/search?q={Uri.EscapeDataString(query)}&format=json";
+
+            using var request = new HttpRequestMessage(HttpMethod.Get, requestUrl);
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+            using var response = await client.SendAsync(request, ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                return $"SearXNG search request failed with HTTP status {(int)response.StatusCode} for query: {query}";
+            }
+
+            var json = await response.Content.ReadAsStringAsync(ct);
+            var results = ParseSearxngJson(json);
+
+            if (results.Count == 0)
+            {
+                return $"No web search results found for query: {query}";
+            }
+
+            var formatted = string.Join("\n\n", results.Select((r, i) => $"**{i + 1}. {r.Title}**\nURL: {r.Url}\n{r.Snippet}"));
+            return $"Web search results for '{query}':\n\n{formatted}";
+        }
+        catch (Exception ex)
+        {
+            return $"SearXNG search encountered an error for query '{query}': {ex.Message}";
+        }
+    }
+
+    private static List<(string Title, string Url, string Snippet)> ParseSearxngJson(string json)
+    {
+        var results = new List<(string Title, string Url, string Snippet)>();
+
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (!doc.RootElement.TryGetProperty("results", out var resultsArray))
+            {
+                return results;
+            }
+
+            foreach (var item in resultsArray.EnumerateArray())
+            {
+                var title = item.TryGetProperty("title", out var titleEl) ? titleEl.GetString() ?? string.Empty : string.Empty;
+                var url = item.TryGetProperty("url", out var urlEl) ? urlEl.GetString() ?? string.Empty : string.Empty;
+                var content = item.TryGetProperty("content", out var contentEl) ? contentEl.GetString() ?? string.Empty : string.Empty;
+
+                if (string.IsNullOrWhiteSpace(title) || string.IsNullOrWhiteSpace(url)) continue;
+
+                results.Add((title.Trim(), url.Trim(), content.Trim()));
+                if (results.Count >= 6) break;
+            }
+        }
+        catch
+        {
+            // Return whatever we have so far
+        }
+
+        return results;
+    }
+
+    private static async Task<string> ExecuteDuckDuckGoAsync(IHttpClientFactory? httpClientFactory, string query, CancellationToken ct)
+    {
         try
         {
             var client = httpClientFactory?.CreateClient() ?? s_defaultHttpClient;

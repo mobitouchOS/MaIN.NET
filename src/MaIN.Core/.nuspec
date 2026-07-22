@@ -2,7 +2,7 @@
 <package>
   <metadata>
     <id>MaIN.NET</id>
-    <version>10.1.0</version>
+    <version>10.2.0</version>
     <authors>Wisedev</authors>
     <owners>Wisedev</owners>
     <icon>favicon.png</icon>
@@ -13,9 +13,9 @@
     <dependencies>
       <dependency id="GTranslate" version="2.3.1" />
       <dependency id="HtmlAgilityPack" version="1.12.4" />
-      <dependency id="LLamaSharp" version="0.26.0" />
-      <dependency id="LLamaSharp.Backend.Cuda12" version="0.26.0" />
-      <dependency id="LLamaSharp.kernel-memory" version="0.26.0" />
+      <dependency id="LLamaSharp" version="0.27.0" />
+      <dependency id="LLamaSharp.Backend.Cuda12" version="0.27.0" />
+      <dependency id="LLamaSharp.kernel-memory" version="0.27.0" />
       <dependency id="ModelContextProtocol.AspNetCore" version="0.2.0-preview.1" />
       <dependency id="Microsoft.SemanticKernel" version="1.68.0" />
       <dependency id="Microsoft.SemanticKernel.Connectors.Google" version="1.64.0-alpha" />

@@ -17,6 +17,9 @@ services:
       # self (default) | openai | gemini | deepseek | groqcloud | anthropic | xai | ollama
       backend: ${BACKEND:-self}
       MaIN__ApiKey: ${MAIN_API_KEY:-}
+      # SearXNG is bundled in the default runtime-cpu and runtime-cuda images.
+      # Override only if you run SearXNG externally.
+      MaIN__SearxngBaseUrl: http://127.0.0.1:8080
       # Cloud provider keys -- set only the one matching `backend`, per LLMApiRegistry's exact env var names.
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}

@@ -29,6 +29,10 @@ public sealed class ChatCompletionTool
 {
     public string Type { get; set; } = "function";
     public ChatCompletionFunctionDefinition? Function { get; set; }
+
+    // OpenAI hosted tool parameters
+    public string? SearchContextSize { get; set; }
+    public List<string>? VectorStoreIds { get; set; }
 }
 
 public sealed class ChatCompletionFunctionDefinition

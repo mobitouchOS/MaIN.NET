@@ -14,6 +14,7 @@ public class MaINSettings
     public string? OllamaKey { get; set; }
     public string? OllamaBaseUrl { get; set; }
     public string? XaiKey { get; set; }
+    public string? SearxngBaseUrl { get; set; }
     public MongoDbSettings? MongoDbSettings { get; set; }
     public FileSystemSettings? FileSystemSettings { get; set; }
     public SqliteSettings? SqliteSettings { get; set; }

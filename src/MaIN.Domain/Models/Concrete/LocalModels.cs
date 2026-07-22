@@ -56,6 +56,14 @@ public sealed record Llama3_2_3b() : LocalModel(
     8192,
     "Lightweight 3B model for chatbots, content creation, and basic coding");
 
+public sealed record Llama3_2_1b() : LocalModel(
+    Models.Local.Llama3_2_1b,
+    "Llama3.2-1b.gguf",
+    new Uri("https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf?download=true"),
+    "Llama 3.2 1B Instruct",
+    128000,
+    "Ultra-lightweight 1B model with native tool calling support for agentic tasks");
+
 public sealed record Llama3_1_8b() : LocalModel(
     Models.Local.Llama3_1_8b,
     "Llama3.1-8b.gguf",
@@ -113,6 +121,14 @@ public sealed record Qwen2_5_0_5b() : LocalModel(
     "Qwen 2.5 0.5B",
     4096,
     "Ultra-lightweight 0.5B model for simple text completion and basic tasks");
+
+public sealed record Qwen2_5_7b() : LocalModel(
+    Models.Local.Qwen2_5_7b,
+    "Qwen2.5-7b.gguf",
+    new Uri("https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GGUF/resolve/main/qwen2.5-7b-instruct-q4_k_m.gguf?download=true"),
+    "Qwen 2.5 7B Instruct",
+    128000,
+    "Best-in-class 7B model for tool calling, function use, and agentic workflows");
 
 public sealed record Qwen2_5_Coder_3b() : LocalModel(
     Models.Local.Qwen2_5_Coder_3b,
@@ -176,6 +192,22 @@ public sealed record QwQ_7b() : LocalModel(
     public string? AdditionalPrompt => "- Output nothing before <think>, enclose all step-by-step reasoning (excluding the final answer) within <think>...</think>, and place the final answer immediately after the closing </think>";
 }
 
+public sealed record Qwen3_5_4b() : LocalModel(
+    Models.Local.Qwen3_5_4b,
+    "Qwen3.5-4B-UD-Q4_K_XL.gguf",
+    new Uri("https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-UD-Q4_K_XL.gguf?download=true"),
+    "Qwen 3.5 4B",
+    262144,
+    "Latest 4B model from Qwen with native tool calling, multimodal support, and 262K context window");
+
+public sealed record Qwen3_5_9b() : LocalModel(
+    Models.Local.Qwen3_5_9b,
+    "Qwen3.5-9B-UD-Q4_K_XL.gguf",
+    new Uri("https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/main/Qwen3.5-9B-UD-Q4_K_XL.gguf?download=true"),
+    "Qwen 3.5 9B",
+    262144,
+    "Powerful 9B model with native tool calling, multimodal support, and 262K context window");
+
 // ===== DeepSeek Family =====
 
 public sealed record DeepSeek_R1_8b() : LocalModel(
@@ -206,11 +238,11 @@ public sealed record DeepSeek_R1_1_5b() : LocalModel(
 
 public sealed record Phi3_5_3b() : LocalModel(
     Models.Local.Phi3_5_3b,
-    "phi3.5-3b.gguf",
-    new Uri("https://huggingface.co/Inza124/phi3.5-3b/resolve/main/phi3.5-3b.gguf?download=true"),
-    "Phi 3.5 3B",
-    4096,
-    "Efficient 3B model for mobile apps, IoT devices, and edge computing");
+    "Phi-3.5-mini-instruct-Q4_K_M.gguf",
+    new Uri("https://huggingface.co/bartowski/Phi-3.5-mini-instruct-GGUF/resolve/main/Phi-3.5-mini-instruct-Q4_K_M.gguf?download=true"),
+    "Phi 3.5 Mini Instruct",
+    128000,
+    "Microsoft's 3.8B model with native tool calling support and 128K context");
 
 public sealed record Phi4_4b() : LocalModel(
     Models.Local.Phi4_4b,
@@ -245,6 +277,30 @@ public sealed record Mistral_3_2_24b() : LocalModel(
     "Mistral 3.2 24B",
     8192,
     "Large 24B model offering advanced reasoning and comprehensive knowledge for complex tasks");
+
+public sealed record Mistral7b() : LocalModel(
+    Models.Local.Mistral7b,
+    "Mistral-7b-Instruct-v0.3.gguf",
+    new Uri("https://huggingface.co/bartowski/Mistral-7B-Instruct-v0.3-GGUF/resolve/main/Mistral-7B-Instruct-v0.3-Q4_K_M.gguf?download=true"),
+    "Mistral 7B Instruct v0.3",
+    32768,
+    "Reliable 7B model with native function calling support for agentic workflows");
+
+public sealed record Nemotron3Nano4b() : LocalModel(
+    Models.Local.Nemotron3Nano4b,
+    "NVIDIA-Nemotron3-Nano-4B-Q4_K_M.gguf",
+    new Uri("https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-4B-GGUF/resolve/main/NVIDIA-Nemotron3-Nano-4B-Q4_K_M.gguf?download=true"),
+    "NVIDIA Nemotron 3 Nano 4B",
+    262144,
+    "NVIDIA's edge-ready 4B model with native tool calling, hybrid Mamba-Transformer architecture, and 262K context");
+
+public sealed record Granite4_1_3b() : LocalModel(
+    Models.Local.Granite4_1_3b,
+    "granite-4.1-3b-Q4_K_M.gguf",
+    new Uri("https://huggingface.co/ibm-granite/granite-4.1-3b-GGUF/resolve/main/granite-4.1-3b-Q4_K_M.gguf?download=true"),
+    "IBM Granite 4.1 3B",
+    131072,
+    "IBM's enterprise-grade 3B model with native tool calling support, designed for RAG and function calling");
 
 public sealed record Webgen_4b() : LocalModel(
     Models.Local.Webgen_4b,

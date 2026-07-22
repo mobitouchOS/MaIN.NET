@@ -7,6 +7,7 @@
 @inject SettingsService SettingsStorage
 @inject MaINSettings MaINSettings
 @inject Microsoft.Extensions.Configuration.IConfiguration Configuration
+@inject NavigationManager NavigationManager
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 
 <link rel="stylesheet" href="settings.css">
@@ -263,6 +264,20 @@
                 <span class="api-key-hint">
                     Required as a Bearer token by external clients calling this instance's
                     <code>/v1/chat/completions</code> and <code>/v1/models</code> endpoints. Configure <code>MaIN__ApiKey</code> environment variable or <code>MaIN:ApiKey</code> in server settings to secure these endpoints.
+                </span>
+            </div>
+
+            <div class="settings-field">
+                <label class="settings-label">API Logs</label>
+                <div style="display:flex;gap:8px;">
+                    <FluentButton Appearance="Appearance.Lightweight"
+                                  OnClick="@(() => NavigationManager.NavigateTo("/logs"))"
+                                  IconStart="@(new Icons.Regular.Size20.History())">
+                        View API Logs
+                    </FluentButton>
+                </div>
+                <span class="api-key-hint">
+                    Monitor incoming requests to <code>/v1/chat/completions</code>, <code>/v1/models</code>, and other API endpoints.
                 </span>
             </div>
         </div>
