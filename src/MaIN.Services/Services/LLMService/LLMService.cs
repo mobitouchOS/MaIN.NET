@@ -431,24 +431,13 @@ public class LLMService : ILLMService
 
             foreach (var messageToProcess in messagesToProcess)
             {
-                template.Add(messageToProcess.Role, messageToProcess.Content);
+                AddMessageToTemplate(template, messageToProcess);
             }
         }
-        else if (hasTools)
-        {
-            foreach (var message in chat.Messages.SkipLast(1))
-            {
-                // For tool result messages, format them in a way the model can understand
-                if (message.Role == ServiceConstants.Roles.Tool)
-                {
-                    template.Add(ServiceConstants.Roles.User, $"[Tool Result]: {message.Content}");
-                }
-                else
-                {
-                    template.Add(message.Role, message.Content);
-                }
-            }
-        }
+        // When !isNewConversation with tools, the sequence state is already loaded from
+        // chat.ConversationState by InitializeConversation. Re-adding all prior messages
+        // here would duplicate-prompt the entire history and corrupt the KV cache.
+        // Only the new tool result message (lastMsg) needs to be appended below.
 
         if (hasTools && isNewConversation)
         {
@@ -457,23 +446,40 @@ public class LLMService : ILLMService
             finalPrompt = $"{toolsPrompt}\n\n{finalPrompt}";
         }
 
-        // For the last message, use its actual role if it's a tool result, otherwise use User
-        if (lastMsg.Role == ServiceConstants.Roles.Tool)
-        {
-            template.Add(ServiceConstants.Roles.User, $"[Tool Result]: {lastMsg.Content}");
-        }
-        else
-        {
-            template.Add(lastMsg.Role, finalPrompt);
-        }
+        // Add the last message using the same role-normalisation as the new-conversation path
+        // so that the chat template output is identical regardless of conversation state.
+        AddMessageToTemplate(template, lastMsg, overrideContent: finalPrompt);
         template.AddAssistant = true;
 
         var templatedMessage = Encoding.UTF8.GetString(template.Apply());
+        
         var tokens = isNewConversation
             ? executor.Context.Tokenize(templatedMessage, addBos: true, special: true)
             : executor.Context.Tokenize(templatedMessage);
 
         conversation.Prompt(tokens);
+    }
+
+    /// <summary>
+    /// Adds a message to the chat template, normalising tool-result messages to user-role
+    /// with a "[Tool Result]:" prefix. Centralised here so the fresh-conversation path
+    /// and the restored-conversation path produce identical template output.
+    /// </summary>
+    private static void AddMessageToTemplate(LLamaTemplate template, Message message, string? overrideContent = null)
+    {
+        var content = overrideContent ?? message.Content;
+
+        if (message.Role == ServiceConstants.Roles.Tool)
+        {
+            // Most chat templates only support system/user/assistant roles. Tool-result
+            // messages are mapped to the user role with an explicit prefix so the model
+            // can distinguish them from ordinary user input.
+            template.Add(ServiceConstants.Roles.User, $"[Tool Result]: {content}");
+        }
+        else
+        {
+            template.Add(message.Role, content);
+        }
     }
 
     private static string FormatToolsForPrompt(ToolsConfiguration toolsConfig, ToolFormatDetector.ToolCallFormat format)
@@ -538,8 +544,6 @@ public class LLMService : ILLMService
                  <tool_call>
                  {"name": "function_name", "arguments": {"param": "value"}}
                  </tool_call>. If a tool does not exist in the provided list of tools, notify the user that you do not have the ability to fulfill the request.
-
-                 IMPORTANT: For hosted tools (web_search, web_search_preview), you should NOT call them as functions. Instead, just provide a response based on your knowledge, and the system will automatically use the hosted tool if needed.
                  """,
             ToolFormatDetector.ToolCallFormat.Llama3 => $$$"""
                  ## TOOLS

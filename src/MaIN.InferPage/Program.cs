@@ -4,6 +4,7 @@ using MaIN.Domain.Configuration;
 using MaIN.Domain.Models.Concrete;
 using MaIN.Domain.Models.Abstract;
 using MaIN.InferPage.Endpoints;
+using MaIN.InferPage.Middlewares;
 using MaIN.InferPage.Services;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.FluentUI.AspNetCore.Components;
@@ -47,6 +48,8 @@ builder.Services.AddFluentUIComponents();
 builder.Services.AddScoped<SettingsService>();
 builder.Services.AddScoped<SettingsStateService>();
 builder.Services.AddOpenApi();
+
+builder.Services.AddSingleton<ApiLogService>();
 
 if (!builder.Environment.IsDevelopment())
 {
@@ -189,6 +192,7 @@ if (!app.Environment.IsDevelopment())
 
 if (app.Environment.IsDevelopment())
     app.UseHttpsRedirection();
+app.UseMiddleware<ApiLoggingMiddleware>();
 app.UseStaticFiles();
 app.UseAntiforgery();
 app.Services.UseMaIN();

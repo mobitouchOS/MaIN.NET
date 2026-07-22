@@ -1,8 +1,10 @@
 using System.Text.Json;
 using MaIN.Core.Hub;
 using MaIN.Core.Hub.Utils;
+using MaIN.Domain.Configuration;
 using MaIN.Domain.Entities.Tools;
 using MaIN.Domain.Models.Abstract;
+using MaIN.Domain.Models.Concrete;
 using MaIN.Services.Services.Models;
 using MaIN.Services.Services.LLMService.Utils;
 
@@ -19,18 +21,65 @@ public static class OpenAiCompatEndpoints
                 return Results.Json(authError, OpenAiJsonOptions.Options, statusCode: StatusCodes.Status401Unauthorized);
             }
 
-            var response = new ModelListResponse
+            // For non-Self backends (cloud, Ollama) — return the single configured model.
+            if (Utils.BackendType != BackendType.Self)
             {
-                Data = string.IsNullOrEmpty(Utils.Model)
-                    ? []
-                    : [new ModelData { Id = Utils.Model, Created = DateTimeOffset.UtcNow.ToUnixTimeSeconds() }]
-            };
+                var nonSelfResponse = new ModelListResponse
+                {
+                    Data = string.IsNullOrEmpty(Utils.Model)
+                        ? []
+                        : [new ModelData { Id = Utils.Model, Created = DateTimeOffset.UtcNow.ToUnixTimeSeconds() }]
+                };
+                return Results.Json(nonSelfResponse, OpenAiJsonOptions.Options);
+            }
 
-            return Results.Json(response, OpenAiJsonOptions.Options);
+            // Self (LLamaSharp) backend — scan models directory for .gguf files and
+            // auto-register any that aren't yet in ModelRegistry so they become usable.
+            var modelsDir = !string.IsNullOrEmpty(Utils.Path)
+                ? Utils.Path
+                : Utils.DefaultModelsPath;
+
+            if (!Directory.Exists(modelsDir))
+            {
+                return Results.Json(new ModelListResponse { Data = [] }, OpenAiJsonOptions.Options);
+            }
+
+            var ggufFiles = Directory.GetFiles(modelsDir, "*.gguf", SearchOption.TopDirectoryOnly);
+            var modelDataList = new List<ModelData>(ggufFiles.Length);
+            var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+
+            foreach (var file in ggufFiles)
+            {
+                var fileName = Path.GetFileName(file);
+
+                var existing = ModelRegistry.GetByFileName(fileName);
+                if (existing is not null)
+                {
+                    modelDataList.Add(new ModelData
+                    {
+                        Id = existing.Id,
+                        Created = now,
+                        OwnedBy = "main-inferpage"
+                    });
+                    continue;
+                }
+
+                // Unknown GGUF on disk — register so it can be used via the API / UI
+                var newModel = new GenericLocalModel(FileName: fileName);
+                ModelRegistry.RegisterOrReplace(newModel);
+                modelDataList.Add(new ModelData
+                {
+                    Id = newModel.Id,
+                    Created = now,
+                    OwnedBy = "main-inferpage"
+                });
+            }
+
+            return Results.Json(new ModelListResponse { Data = modelDataList }, OpenAiJsonOptions.Options);
         })
         .WithName("ListModels")
         .WithTags("OpenAI-Compatible API")
-        .WithSummary("Lists the model this InferPage instance is currently serving.")
+        .WithSummary("Lists available models. Scans the models directory and auto-registers unknown GGUF files.")
         .Produces<ModelListResponse>()
         .Produces<OpenAiErrorResponse>(StatusCodes.Status401Unauthorized);
 
@@ -379,6 +428,8 @@ public static class OpenAiCompatEndpoints
         CancellationToken ct)
     {
         var httpClientFactory = response.HttpContext.RequestServices.GetService<IHttpClientFactory>();
+        var configuration = response.HttpContext.RequestServices.GetService<IConfiguration>();
+        var searxngBaseUrl = configuration?["MaIN:SearxngBaseUrl"] ?? Environment.GetEnvironmentVariable("MaIN__SearxngBaseUrl");
         var toolsBuilder = new ToolsConfigurationBuilder();
         bool hasServerSideTools = false;
 
@@ -392,7 +443,7 @@ public static class OpenAiCompatEndpoints
             {
                 // Map OpenAI hosted tool types to our internal tool names
                 var internalToolName = MapOpenAiHostedToolName(tool.Type);
-                if (HostedToolsResolver.TryResolveBuiltInTool(internalToolName, httpClientFactory, out var builtInTool))
+                if (HostedToolsResolver.TryResolveBuiltInTool(internalToolName, httpClientFactory, out var builtInTool, searxngBaseUrl))
                 {
                     builtInTool.Type = tool.Type;
                     builtInTool.IsClientSide = false;
@@ -400,7 +451,7 @@ public static class OpenAiCompatEndpoints
                     hasServerSideTools = true;
                 }
             }
-            else if (HostedToolsResolver.TryResolveBuiltInTool(toolNameOrType, httpClientFactory, out var builtInTool))
+            else if (HostedToolsResolver.TryResolveBuiltInTool(toolNameOrType, httpClientFactory, out var builtInTool, searxngBaseUrl))
             {
                 builtInTool.Type = tool.Type;
                 builtInTool.IsClientSide = false;
@@ -602,13 +653,15 @@ public static class OpenAiCompatEndpoints
         CancellationToken ct)
     {
         var httpClientFactory = response.HttpContext.RequestServices.GetService<IHttpClientFactory>();
+        var configuration = response.HttpContext.RequestServices.GetService<IConfiguration>();
+        var searxngBaseUrl = configuration?["MaIN:SearxngBaseUrl"] ?? Environment.GetEnvironmentVariable("MaIN__SearxngBaseUrl");
         var toolsBuilder = new ToolsConfigurationBuilder();
         bool hasServerSideTools = false;
 
         foreach (var tool in request.Tools!)
         {
             var toolNameOrType = tool.Function?.Name ?? tool.Type;
-            if (HostedToolsResolver.TryResolveBuiltInTool(toolNameOrType, httpClientFactory, out var builtInTool))
+            if (HostedToolsResolver.TryResolveBuiltInTool(toolNameOrType, httpClientFactory, out var builtInTool, searxngBaseUrl))
             {
                 builtInTool.Type = tool.Type;
                 builtInTool.IsClientSide = false;

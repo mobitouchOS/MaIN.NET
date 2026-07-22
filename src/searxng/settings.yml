@@ -1,0 +1,13 @@
+use_default_settings: true
+
+server:
+  bind_address: 127.0.0.1
+  port: 8080
+  secret_key: "change-this-secret-key"
+  limiter: false
+  public_instance: false
+
+search:
+  formats:
+    - html
+    - json

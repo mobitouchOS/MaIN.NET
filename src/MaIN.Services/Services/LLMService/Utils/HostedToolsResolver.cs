@@ -8,7 +8,8 @@ public static class HostedToolsResolver
     public static bool TryResolveBuiltInTool(
         string typeOrName,
         IHttpClientFactory? httpClientFactory,
-        [NotNullWhen(true)] out ToolDefinition? tool)
+        [NotNullWhen(true)] out ToolDefinition? tool,
+        string? searxngBaseUrl = null)
     {
         if (string.IsNullOrWhiteSpace(typeOrName))
         {
@@ -23,7 +24,7 @@ public static class HostedToolsResolver
             case "web_search":
             case "web_search_preview":
             case "search_web":
-                tool = WebSearchTool.Create(httpClientFactory, toolName: normalized);
+                tool = WebSearchTool.Create(httpClientFactory, toolName: normalized, searxngBaseUrl: searxngBaseUrl);
                 return true;
 
             case "fetch_web_page":
@@ -61,11 +62,11 @@ public static class HostedToolsResolver
         }
     }
 
-    public static List<ToolDefinition> GetAllBuiltInTools(IHttpClientFactory? httpClientFactory = null)
+    public static List<ToolDefinition> GetAllBuiltInTools(IHttpClientFactory? httpClientFactory = null, string? searxngBaseUrl = null)
     {
         return
         [
-            WebSearchTool.Create(httpClientFactory),
+            WebSearchTool.Create(httpClientFactory, searxngBaseUrl: searxngBaseUrl),
             WebPageFetchTool.Create(httpClientFactory),
             DateTimeTool.Create(),
             HttpRequestTool.Create(httpClientFactory),

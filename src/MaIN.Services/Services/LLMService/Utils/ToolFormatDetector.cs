@@ -31,8 +31,10 @@ public static class ToolFormatDetector
     /// </summary>
     public static ToolCallFormat DetectFormat(LocalModel model)
     {
-        var fileName = model.FileName.ToLowerInvariant();
-        var id = model.Id.ToLowerInvariant();
+        // Unregistered models loaded as GenericLocalModel may have a null Id; guard against
+        // NullReferenceException before calling ToLowerInvariant().
+        var fileName = model.FileName?.ToLowerInvariant() ?? string.Empty;
+        var id = model.Id?.ToLowerInvariant() ?? string.Empty;
 
         // IBM Granite - uses simple <tool_call>{"name":..., "arguments":...}</tool_call> format
         if (fileName.Contains("granite") || id.Contains("granite"))
