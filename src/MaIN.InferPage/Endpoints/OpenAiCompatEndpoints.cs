@@ -12,6 +12,64 @@ namespace MaIN.InferPage.Endpoints;
 
 public static class OpenAiCompatEndpoints
 {
+    private static ModelListResponse? _cachedModelsResponse;
+
+    public static void InitializeModelCache()
+    {
+        if (Utils.BackendType != BackendType.Self)
+        {
+            _cachedModelsResponse = new ModelListResponse
+            {
+                Data = string.IsNullOrEmpty(Utils.Model)
+                    ? []
+                    : [new ModelData { Id = Utils.Model, Created = DateTimeOffset.UtcNow.ToUnixTimeSeconds() }]
+            };
+            return;
+        }
+
+        var modelsDir = !string.IsNullOrEmpty(Utils.Path)
+            ? Utils.Path
+            : Utils.DefaultModelsPath;
+
+        if (!Directory.Exists(modelsDir))
+        {
+            _cachedModelsResponse = new ModelListResponse { Data = [] };
+            return;
+        }
+
+        var ggufFiles = Directory.GetFiles(modelsDir, "*.gguf", SearchOption.TopDirectoryOnly);
+        var modelDataList = new List<ModelData>(ggufFiles.Length);
+        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+
+        foreach (var file in ggufFiles)
+        {
+            var fileName = Path.GetFileName(file);
+
+            var existing = ModelRegistry.GetByFileName(fileName);
+            if (existing is not null)
+            {
+                modelDataList.Add(new ModelData
+                {
+                    Id = existing.Id,
+                    Created = now,
+                    OwnedBy = "main-inferpage"
+                });
+                continue;
+            }
+
+            var newModel = new GenericLocalModel(FileName: fileName);
+            ModelRegistry.RegisterOrReplace(newModel);
+            modelDataList.Add(new ModelData
+            {
+                Id = newModel.Id,
+                Created = now,
+                OwnedBy = "main-inferpage"
+            });
+        }
+
+        _cachedModelsResponse = new ModelListResponse { Data = modelDataList };
+    }
+
     public static void MapOpenAiCompatEndpoints(this WebApplication app)
     {
         app.MapGet("/v1/models", (HttpRequest request) =>
@@ -21,65 +79,11 @@ public static class OpenAiCompatEndpoints
                 return Results.Json(authError, OpenAiJsonOptions.Options, statusCode: StatusCodes.Status401Unauthorized);
             }
 
-            // For non-Self backends (cloud, Ollama) — return the single configured model.
-            if (Utils.BackendType != BackendType.Self)
-            {
-                var nonSelfResponse = new ModelListResponse
-                {
-                    Data = string.IsNullOrEmpty(Utils.Model)
-                        ? []
-                        : [new ModelData { Id = Utils.Model, Created = DateTimeOffset.UtcNow.ToUnixTimeSeconds() }]
-                };
-                return Results.Json(nonSelfResponse, OpenAiJsonOptions.Options);
-            }
-
-            // Self (LLamaSharp) backend — scan models directory for .gguf files and
-            // auto-register any that aren't yet in ModelRegistry so they become usable.
-            var modelsDir = !string.IsNullOrEmpty(Utils.Path)
-                ? Utils.Path
-                : Utils.DefaultModelsPath;
-
-            if (!Directory.Exists(modelsDir))
-            {
-                return Results.Json(new ModelListResponse { Data = [] }, OpenAiJsonOptions.Options);
-            }
-
-            var ggufFiles = Directory.GetFiles(modelsDir, "*.gguf", SearchOption.TopDirectoryOnly);
-            var modelDataList = new List<ModelData>(ggufFiles.Length);
-            var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-
-            foreach (var file in ggufFiles)
-            {
-                var fileName = Path.GetFileName(file);
-
-                var existing = ModelRegistry.GetByFileName(fileName);
-                if (existing is not null)
-                {
-                    modelDataList.Add(new ModelData
-                    {
-                        Id = existing.Id,
-                        Created = now,
-                        OwnedBy = "main-inferpage"
-                    });
-                    continue;
-                }
-
-                // Unknown GGUF on disk — register so it can be used via the API / UI
-                var newModel = new GenericLocalModel(FileName: fileName);
-                ModelRegistry.RegisterOrReplace(newModel);
-                modelDataList.Add(new ModelData
-                {
-                    Id = newModel.Id,
-                    Created = now,
-                    OwnedBy = "main-inferpage"
-                });
-            }
-
-            return Results.Json(new ModelListResponse { Data = modelDataList }, OpenAiJsonOptions.Options);
+            return Results.Json(_cachedModelsResponse ?? new ModelListResponse { Data = [] }, OpenAiJsonOptions.Options);
         })
         .WithName("ListModels")
         .WithTags("OpenAI-Compatible API")
-        .WithSummary("Lists available models. Scans the models directory and auto-registers unknown GGUF files.")
+        .WithSummary("Lists available models. Populated at startup from the models directory.")
         .Produces<ModelListResponse>()
         .Produces<OpenAiErrorResponse>(StatusCodes.Status401Unauthorized);
 

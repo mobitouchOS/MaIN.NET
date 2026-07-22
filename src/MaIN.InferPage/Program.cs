@@ -221,6 +221,7 @@ if (!Utils.NeedsConfiguration && Utils.BackendType == BackendType.Self && !strin
 
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
+OpenAiCompatEndpoints.InitializeModelCache();
 app.MapOpenAiCompatEndpoints();
 
 // Interactive API docs for the OpenAI-compatible endpoint (/scalar/v1), backed by the

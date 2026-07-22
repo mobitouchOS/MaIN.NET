@@ -443,7 +443,17 @@ public class LLMService : ILLMService
         {
             var format = ToolFormatDetector.DetectFormat(model);
             var toolsPrompt = FormatToolsForPrompt(chat.ToolsConfiguration!, format);
-            finalPrompt = $"{toolsPrompt}\n\n{finalPrompt}";
+
+            if (!chat.Properties.ContainsKey(ServiceConstants.Properties.ToolsFormattedProperty))
+            {
+                var firstUserMsg = chat.Messages.FirstOrDefault(m => m.Role == ServiceConstants.Roles.User);
+                if (firstUserMsg is not null)
+                {
+                    firstUserMsg.Content = $"{toolsPrompt}\n\n{firstUserMsg.Content}";
+                }
+
+                chat.Properties[ServiceConstants.Properties.ToolsFormattedProperty] = "true";
+            }
         }
 
         // Add the last message using the same role-normalisation as the new-conversation path
@@ -799,11 +809,7 @@ public class LLMService : ILLMService
         ChatRequestOptions requestOptions,
         CancellationToken cancellationToken)
     {
-        var model = ModelRegistry.GetById(chat.ModelId);
-        if (model is not LocalModel localModel)
-        {
-            throw new InvalidModelTypeException(nameof(LocalModel));
-        }
+        var localModel = GetLocalModel(chat);
 
         var toolFormat = ToolFormatDetector.DetectFormat(localModel);
         var iterations = 0;
