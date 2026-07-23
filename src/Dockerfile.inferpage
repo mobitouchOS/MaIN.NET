@@ -62,7 +62,7 @@ RUN find /app/runtimes/linux-x64/native -maxdepth 2 -mindepth 1 -type d \
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         build-essential \
-        git \
+        curl \
         libffi-dev \
         libssl-dev \
         libxml2-dev \
@@ -72,11 +72,14 @@ RUN apt-get update \
         python3-venv \
         zlib1g-dev \
     && rm -rf /var/lib/apt/lists/* \
-    && git clone --depth 1 https://github.com/searxng/searxng.git /opt/searxng \
+    && curl -fsSL https://github.com/searxng/searxng/archive/refs/heads/master.tar.gz -o /tmp/searxng.tar.gz \
+    && mkdir -p /opt/searxng \
+    && tar -xzf /tmp/searxng.tar.gz -C /opt/searxng --strip-components=1 \
+    && rm /tmp/searxng.tar.gz \
     && python3 -m venv /opt/searxng-venv \
     && /opt/searxng-venv/bin/pip install --no-cache-dir --upgrade pip setuptools wheel \
-    && /opt/searxng-venv/bin/pip install --no-cache-dir msgspec pyyaml typing-extensions pybind11 \
-    && /opt/searxng-venv/bin/pip install --no-cache-dir --use-pep517 --no-build-isolation /opt/searxng
+    && /opt/searxng-venv/bin/pip install --no-cache-dir --only-binary :all: lxml msgspec pyyaml typing-extensions pybind11 \
+    && /opt/searxng-venv/bin/pip install --no-cache-dir --no-deps /opt/searxng
 
 COPY searxng/settings.yml /etc/searxng/settings.yml
 COPY entrypoint-searxng.sh /entrypoint-searxng.sh
@@ -86,6 +89,7 @@ ENV MaIN__SearxngBaseUrl=http://127.0.0.1:8080
 ENV SEARXNG_SETTINGS_PATH=/etc/searxng/settings.yml
 
 ENTRYPOINT ["/entrypoint-searxng.sh"]
+
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime-cpu
 
@@ -112,7 +116,7 @@ RUN find /app/runtimes/linux-x64/native -maxdepth 2 -mindepth 1 -type d \
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         build-essential \
-        git \
+        curl \
         libffi-dev \
         libssl-dev \
         libxml2-dev \
@@ -122,11 +126,14 @@ RUN apt-get update \
         python3-venv \
         zlib1g-dev \
     && rm -rf /var/lib/apt/lists/* \
-    && git clone --depth 1 https://github.com/searxng/searxng.git /opt/searxng \
+    && curl -fsSL https://github.com/searxng/searxng/archive/refs/heads/master.tar.gz -o /tmp/searxng.tar.gz \
+    && mkdir -p /opt/searxng \
+    && tar -xzf /tmp/searxng.tar.gz -C /opt/searxng --strip-components=1 \
+    && rm /tmp/searxng.tar.gz \
     && python3 -m venv /opt/searxng-venv \
     && /opt/searxng-venv/bin/pip install --no-cache-dir --upgrade pip setuptools wheel \
-    && /opt/searxng-venv/bin/pip install --no-cache-dir msgspec pyyaml typing-extensions pybind11 \
-    && /opt/searxng-venv/bin/pip install --no-cache-dir --use-pep517 --no-build-isolation /opt/searxng
+    && /opt/searxng-venv/bin/pip install --no-cache-dir --only-binary :all: lxml msgspec pyyaml typing-extensions pybind11 \
+    && /opt/searxng-venv/bin/pip install --no-cache-dir --no-deps /opt/searxng
 
 COPY searxng/settings.yml /etc/searxng/settings.yml
 COPY entrypoint-searxng.sh /entrypoint-searxng.sh
