@@ -78,8 +78,8 @@ RUN apt-get update \
     && rm /tmp/searxng.tar.gz \
     && python3 -m venv /opt/searxng-venv \
     && /opt/searxng-venv/bin/pip install --no-cache-dir --upgrade pip setuptools wheel \
-    && /opt/searxng-venv/bin/pip install --no-cache-dir --only-binary :all: lxml msgspec pyyaml typing-extensions pybind11 \
-    && /opt/searxng-venv/bin/pip install --no-cache-dir --no-deps /opt/searxng
+    && /opt/searxng-venv/bin/pip install --no-cache-dir --prefer-binary msgspec pyyaml typing-extensions pybind11 \
+    && /opt/searxng-venv/bin/pip install --no-cache-dir --use-pep517 --no-build-isolation /opt/searxng
 
 COPY searxng/settings.yml /etc/searxng/settings.yml
 COPY entrypoint-searxng.sh /entrypoint-searxng.sh
@@ -132,8 +132,8 @@ RUN apt-get update \
     && rm /tmp/searxng.tar.gz \
     && python3 -m venv /opt/searxng-venv \
     && /opt/searxng-venv/bin/pip install --no-cache-dir --upgrade pip setuptools wheel \
-    && /opt/searxng-venv/bin/pip install --no-cache-dir --only-binary :all: lxml msgspec pyyaml typing-extensions pybind11 \
-    && /opt/searxng-venv/bin/pip install --no-cache-dir --no-deps /opt/searxng
+    && /opt/searxng-venv/bin/pip install --no-cache-dir --prefer-binary msgspec pyyaml typing-extensions pybind11 \
+    && /opt/searxng-venv/bin/pip install --no-cache-dir --use-pep517 --no-build-isolation /opt/searxng
 
 COPY searxng/settings.yml /etc/searxng/settings.yml
 COPY entrypoint-searxng.sh /entrypoint-searxng.sh
