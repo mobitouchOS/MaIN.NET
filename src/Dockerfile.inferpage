@@ -76,6 +76,13 @@ RUN apt-get update \
     && mkdir -p /opt/searxng \
     && tar -xzf /tmp/searxng.tar.gz -C /opt/searxng --strip-components=1 \
     && rm /tmp/searxng.tar.gz \
+    && printf '%s\n' \
+        "VERSION_STRING = '1.0.0'" \
+        "VERSION_TAG = '1.0.0'" \
+        "DOCKER_TAG = '1.0.0'" \
+        "GIT_URL = 'https://github.com/searxng/searxng'" \
+        "GIT_BRANCH = 'master'" \
+        > /opt/searxng/searx/version_frozen.py \
     && python3 -m venv /opt/searxng-venv \
     && /opt/searxng-venv/bin/pip install --no-cache-dir --upgrade pip setuptools wheel \
     && /opt/searxng-venv/bin/pip install --no-cache-dir --prefer-binary msgspec pyyaml typing-extensions pybind11 \
@@ -130,6 +137,13 @@ RUN apt-get update \
     && mkdir -p /opt/searxng \
     && tar -xzf /tmp/searxng.tar.gz -C /opt/searxng --strip-components=1 \
     && rm /tmp/searxng.tar.gz \
+    && printf '%s\n' \
+        "VERSION_STRING = '1.0.0'" \
+        "VERSION_TAG = '1.0.0'" \
+        "DOCKER_TAG = '1.0.0'" \
+        "GIT_URL = 'https://github.com/searxng/searxng'" \
+        "GIT_BRANCH = 'master'" \
+        > /opt/searxng/searx/version_frozen.py \
     && python3 -m venv /opt/searxng-venv \
     && /opt/searxng-venv/bin/pip install --no-cache-dir --upgrade pip setuptools wheel \
     && /opt/searxng-venv/bin/pip install --no-cache-dir --prefer-binary msgspec pyyaml typing-extensions pybind11 \
