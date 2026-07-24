@@ -1,4 +1,9 @@
-use_default_settings: true
+use_default_settings:
+  engines:
+    remove:
+      - ahmia
+      - torch
+      - wikidata
 
 server:
   bind_address: 127.0.0.1

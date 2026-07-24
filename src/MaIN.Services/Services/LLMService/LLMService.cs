@@ -419,9 +419,30 @@ public class LLMService : ILLMService
         bool isNewConversation)
     {
         var template = new LLamaTemplate(llmModel);
-        var finalPrompt = GetFinalPrompt(lastMsg, model, isNewConversation);
 
         var hasTools = chat.ToolsConfiguration?.Tools is not null && chat.ToolsConfiguration.Tools.Count != 0;
+
+        // Inject the tools prompt into the first user message BEFORE computing finalPrompt
+        // and BEFORE adding messages to the template, so the modified content is what
+        // actually gets used in both finalPrompt and the template.
+        if (hasTools && isNewConversation)
+        {
+            var format = ToolFormatDetector.DetectFormat(model);
+            var toolsPrompt = FormatToolsForPrompt(chat.ToolsConfiguration!, format);
+
+            if (!chat.Properties.ContainsKey(ServiceConstants.Properties.ToolsFormattedProperty))
+            {
+                var firstUserMsg = chat.Messages.FirstOrDefault(m => string.Equals(m.Role, ServiceConstants.Roles.User, StringComparison.OrdinalIgnoreCase));
+                if (firstUserMsg is not null)
+                {
+                    firstUserMsg.Content = $"{toolsPrompt}\n\n{firstUserMsg.Content}";
+                }
+
+                chat.Properties[ServiceConstants.Properties.ToolsFormattedProperty] = "true";
+            }
+        }
+
+        var finalPrompt = GetFinalPrompt(lastMsg, model, isNewConversation);
 
         if (isNewConversation)
         {
@@ -438,23 +459,6 @@ public class LLMService : ILLMService
         // chat.ConversationState by InitializeConversation. Re-adding all prior messages
         // here would duplicate-prompt the entire history and corrupt the KV cache.
         // Only the new tool result message (lastMsg) needs to be appended below.
-
-        if (hasTools && isNewConversation)
-        {
-            var format = ToolFormatDetector.DetectFormat(model);
-            var toolsPrompt = FormatToolsForPrompt(chat.ToolsConfiguration!, format);
-
-            if (!chat.Properties.ContainsKey(ServiceConstants.Properties.ToolsFormattedProperty))
-            {
-                var firstUserMsg = chat.Messages.FirstOrDefault(m => m.Role == ServiceConstants.Roles.User);
-                if (firstUserMsg is not null)
-                {
-                    firstUserMsg.Content = $"{toolsPrompt}\n\n{firstUserMsg.Content}";
-                }
-
-                chat.Properties[ServiceConstants.Properties.ToolsFormattedProperty] = "true";
-            }
-        }
 
         // Add the last message using the same role-normalisation as the new-conversation path
         // so that the chat template output is identical regardless of conversation state.
@@ -496,6 +500,7 @@ public class LLMService : ILLMService
     {
         var toolsList = new StringBuilder();
         var toolsJsonList = new StringBuilder();
+        var toolsXmlList = new StringBuilder();
         foreach (var tool in toolsConfig.Tools)
         {
             if (tool.Function == null)
@@ -521,11 +526,42 @@ public class LLMService : ILLMService
                 };
                 toolsJsonList.AppendLine(JsonSerializer.Serialize(toolJson));
             }
+
+            if (format == ToolFormatDetector.ToolCallFormat.Qwen3Xml)
+            {
+                toolsXmlList.AppendLine("<function>");
+                toolsXmlList.AppendLine($"<name>{tool.Function.Name}</name>");
+                toolsXmlList.AppendLine($"<description>{tool.Function.Description}</description>");
+                toolsXmlList.AppendLine("<parameters>");
+                if (tool.Function.Parameters != null)
+                {
+                    var paramsJson = JsonSerializer.Serialize(tool.Function.Parameters);
+                    using var paramsDoc = JsonDocument.Parse(paramsJson);
+                    if (paramsDoc.RootElement.TryGetProperty("properties", out var props))
+                    {
+                        foreach (var prop in props.EnumerateObject())
+                        {
+                            toolsXmlList.AppendLine("<parameter>");
+                            toolsXmlList.AppendLine($"<name>{prop.Name}</name>");
+                            if (prop.Value.TryGetProperty("description", out var desc))
+                                toolsXmlList.AppendLine($"<description>{desc.GetString()}</description>");
+                            if (prop.Value.TryGetProperty("type", out var type))
+                                toolsXmlList.AppendLine($"<type>{type.GetString()}</type>");
+                            toolsXmlList.AppendLine("</parameter>");
+                        }
+                    }
+                }
+                toolsXmlList.AppendLine("</parameters>");
+                toolsXmlList.AppendLine("</function>");
+            }
         }
 
-        var toolsContent = format == ToolFormatDetector.ToolCallFormat.Granite
-            ? toolsJsonList.ToString().TrimEnd()
-            : toolsList.ToString().TrimEnd();
+        var toolsContent = format switch
+        {
+            ToolFormatDetector.ToolCallFormat.Granite => toolsJsonList.ToString().TrimEnd(),
+            ToolFormatDetector.ToolCallFormat.Qwen3Xml => toolsXmlList.ToString().TrimEnd(),
+            _ => toolsList.ToString().TrimEnd()
+        };
 
         return format switch
         {
@@ -554,6 +590,33 @@ public class LLMService : ILLMService
                  <tool_call>
                  {"name": "function_name", "arguments": {"param": "value"}}
                  </tool_call>. If a tool does not exist in the provided list of tools, notify the user that you do not have the ability to fulfill the request.
+                 """,
+            ToolFormatDetector.ToolCallFormat.Qwen3Xml => $$$"""
+                 You are a helpful assistant with access to the following functions.
+
+                 You are provided with function signatures within <tools></tools> XML tags:
+                 <tools>
+                 {{{toolsContent}}}
+                 </tools>
+
+                 If you choose to call a function ONLY reply in the following format with NO suffix:
+
+                 <tool_call>
+                 <function=example_function_name>
+                 <parameter=example_parameter_1>
+                 value_1
+                 </parameter>
+                 <parameter=example_parameter_2>
+                 value_2
+                 </parameter>
+                 </function>
+                 </tool_call>
+
+                 Reminder:
+                 - Function calls MUST follow the specified format: an inner <function=...> block must be nested within <tool_call></tool_call> XML tags
+                 - Required parameters MUST be specified
+                 - You may provide optional reasoning for your function call in natural language BEFORE the function call, but NOT after
+                 - If there is no function call available, answer the question like normal with your current knowledge and do not tell the user about function calls
                  """,
             ToolFormatDetector.ToolCallFormat.Llama3 => $$$"""
                  ## TOOLS

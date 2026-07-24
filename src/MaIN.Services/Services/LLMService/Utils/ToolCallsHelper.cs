@@ -101,11 +101,58 @@ public static class ToolCallParser
         return format switch
         {
             ToolFormatDetector.ToolCallFormat.Granite => ExtractFromGraniteFormat(text),
+            ToolFormatDetector.ToolCallFormat.Qwen3Xml => ExtractFromQwen3XmlFormat(text),
             ToolFormatDetector.ToolCallFormat.Llama3 => ExtractFromLlama3Format(text),
             ToolFormatDetector.ToolCallFormat.MistralV3 => ExtractFromMistralV3Format(text),
             ToolFormatDetector.ToolCallFormat.Phi3 => ExtractFromPhi3Format(text),
             _ => ExtractFromCodeBlock(text) ?? FindBalancedJson(text) ?? ExtractPartialJson(text)
         };
+    }
+
+    private static string? ExtractFromQwen3XmlFormat(string text)
+    {
+        // Qwen3.5 / Qwen3-Coder XML format:
+        // <tool_call><function=name><parameter=k>v</parameter></function></tool_call>
+        // Convert XML to JSON {"name":..., "arguments":{...}} so ParseToolCalls can handle it
+        var functionMatch = System.Text.RegularExpressions.Regex.Match(
+            text, @"<function=([a-zA-Z0-9_]+)>",
+            System.Text.RegularExpressions.RegexOptions.None);
+        if (!functionMatch.Success)
+            return ExtractFromCodeBlock(text) ?? FindBalancedJson(text) ?? ExtractPartialJson(text);
+
+        var functionName = functionMatch.Groups[1].Value;
+        var arguments = new Dictionary<string, object?>();
+
+        // Extract all <parameter=key>value</parameter> pairs
+        var paramMatches = System.Text.RegularExpressions.Regex.Matches(
+            text, @"<parameter=([a-zA-Z0-9_]+)>\s*([\s\S]*?)\s*</parameter>",
+            System.Text.RegularExpressions.RegexOptions.None);
+        foreach (System.Text.RegularExpressions.Match paramMatch in paramMatches)
+        {
+            var key = paramMatch.Groups[1].Value;
+            var rawValue = paramMatch.Groups[2].Value.Trim();
+            arguments[key] = TryParseValue(rawValue);
+        }
+
+        var toolCallObj = new { name = functionName, arguments };
+        return JsonSerializer.Serialize(toolCallObj);
+    }
+
+    private static object? TryParseValue(string value)
+    {
+        // Try to parse as JSON (for numbers, booleans, objects, arrays)
+        if (string.IsNullOrEmpty(value)) return value;
+        if (value is "true" or "false") return value == "true";
+        if (long.TryParse(value, out var l)) return l;
+        if (double.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, out var d)) return d;
+        // Try JSON for objects/arrays
+        if ((value.StartsWith('{') && value.EndsWith('}')) ||
+            (value.StartsWith('[') && value.EndsWith(']')))
+        {
+            try { return JsonSerializer.Deserialize<object>(value); }
+            catch { /* fall through */ }
+        }
+        return value;
     }
 
     private static string? ExtractFromGraniteFormat(string text)
