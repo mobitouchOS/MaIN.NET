@@ -222,6 +222,22 @@ public sealed record DeepSeek_R1_8b() : LocalModel(
     public string? AdditionalPrompt => null;
 }
 
+public sealed record Qwen3_30b_A3B_Instruct2507() : LocalModel(
+    Models.Local.Qwen3_30b_A3B_Instruct2507,
+    "Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf",
+    new Uri("https://huggingface.co/unsloth/Qwen3-30B-A3B-Instruct-2507-GGUF/resolve/main/Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf?download=true"),
+    "Qwen 3 30B A3B Instruct 2507",
+    262144,
+    "Modern sparse MoE model with 3.3B active parameters, 256K context, multilingual instruction following, and tool use");
+
+public sealed record Qwen3_Coder_30b_A3B() : LocalModel(
+    Models.Local.Qwen3_Coder_30b_A3B,
+    "Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf",
+    new Uri("https://huggingface.co/unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF/resolve/main/Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf?download=true"),
+    "Qwen 3 Coder 30B A3B",
+    262144,
+    "Agentic coding model with 3.3B active parameters, repository-scale context, and native tool-use support");
+
 public sealed record DeepSeek_R1_1_5b() : LocalModel(
     Models.Local.DeepSeekR1_1_5b,
     "DeepSeekR1-1.5b.gguf",
@@ -232,6 +248,79 @@ public sealed record DeepSeek_R1_1_5b() : LocalModel(
 {
     public Func<string, ThinkingState, LLMTokenValue>? ReasonFunction => ReasoningFunctions.ProcessDeepSeekToken;
     public string? AdditionalPrompt => null;
+}
+
+// ===== Modern 20B-100B Models =====
+
+public sealed record MagistralSmall_24b() : LocalModel(
+    Models.Local.MagistralSmall_24b,
+    "Magistral-Small-2506-Q4_K_M.gguf",
+    new Uri("https://huggingface.co/unsloth/Magistral-Small-2506-GGUF/resolve/main/Magistral-Small-2506-Q4_K_M.gguf?download=true"),
+    "Magistral Small 24B",
+    40960,
+    "Multilingual reasoning model designed for local deployment with a recommended 40K context window"), IReasoningModel
+{
+    public Func<string, ThinkingState, LLMTokenValue>? ReasonFunction => ReasoningFunctions.ProcessDeepSeekToken;
+    public string? AdditionalPrompt => null;
+}
+
+public sealed record GptOss_20b() : LocalModel(
+    Models.Local.GptOss_20b,
+    "gpt-oss-20b-Q4_K_M.gguf",
+    new Uri("https://huggingface.co/unsloth/gpt-oss-20b-GGUF/resolve/main/gpt-oss-20b-Q4_K_M.gguf?download=true"),
+    "OpenAI gpt-oss 20B",
+    131072,
+    "Apache 2.0 open-weight MoE model with configurable reasoning, structured outputs, and tool use"), IReasoningModel
+{
+    public Func<string, ThinkingState, LLMTokenValue>? ReasonFunction => ReasoningFunctions.ProcessDeepSeekToken;
+    public string? AdditionalPrompt => "Reasoning: medium";
+}
+
+public sealed record DevstralSmall2_24b() : LocalModel(
+    Models.Local.DevstralSmall2_24b,
+    "Devstral-Small-2-24B-Instruct-2512-Q4_K_M.gguf",
+    new Uri("https://huggingface.co/bartowski/mistralai_Devstral-Small-2-24B-Instruct-2512-GGUF/resolve/main/mistralai_Devstral-Small-2-24B-Instruct-2512-Q4_K_M.gguf?download=true"),
+    "Devstral Small 2 24B",
+    131072,
+    "Software-engineering model optimized for repository understanding, terminal tasks, and agentic coding");
+
+public sealed record Exaone4_32b() : LocalModel(
+    Models.Local.Exaone4_32b,
+    "EXAONE-4.0-32B-Q4_K_M.gguf",
+    new Uri("https://huggingface.co/LGAI-EXAONE/EXAONE-4.0-32B-GGUF/resolve/main/EXAONE-4.0-32B-Q4_K_M.gguf?download=true"),
+    "EXAONE 4.0 32B",
+    131072,
+    "English, Korean, and Spanish model with reasoning modes, agentic tool use, and 128K context");
+
+public sealed record Nemotron3Nano_30b_A3B() : LocalModel(
+    Models.Local.Nemotron3Nano_30b_A3B,
+    "Nemotron-3-Nano-30B-A3B-Q4_K_M.gguf",
+    new Uri("https://huggingface.co/unsloth/Nemotron-3-Nano-30B-A3B-GGUF/resolve/main/Nemotron-3-Nano-30B-A3B-Q4_K_M.gguf?download=true"),
+    "NVIDIA Nemotron 3 Nano 30B A3B",
+    262144,
+    "Hybrid Mamba-Transformer MoE model with configurable reasoning, tool use, and 3.5B active parameters"), IReasoningModel
+{
+    public Func<string, ThinkingState, LLMTokenValue>? ReasonFunction => ReasoningFunctions.ProcessDeepSeekToken;
+    public string? AdditionalPrompt => null;
+}
+
+public sealed record Qwen3_VL_32b_Instruct() : LocalModel(
+    Models.Local.Qwen3_VL_32b_Instruct,
+    "Qwen3-VL-32B-Instruct-Q4_K_M.gguf",
+    new Uri("https://huggingface.co/unsloth/Qwen3-VL-32B-Instruct-GGUF/resolve/main/Qwen3-VL-32B-Instruct-Q4_K_M.gguf?download=true"),
+    "Qwen 3 VL 32B Instruct",
+    262144,
+    "Multimodal model for image understanding, OCR, video, visual coding, and visual agents"), IVisionModel
+{
+    public string MMProjectName => "mmproj-F16.gguf";
+
+    public override IEnumerable<ModelAsset> RequiredAssets =>
+    [
+        new ModelAsset(FileName, DownloadUrl),
+        new ModelAsset(
+            MMProjectName,
+            new Uri("https://huggingface.co/unsloth/Qwen3-VL-32B-Instruct-GGUF/resolve/main/mmproj-F16.gguf?download=true"))
+    ];
 }
 
 // ===== Phi Family =====

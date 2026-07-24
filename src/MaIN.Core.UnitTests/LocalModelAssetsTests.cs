@@ -1,4 +1,5 @@
 using MaIN.Domain.Models.Abstract;
+using MaIN.Domain.Models.Concrete;
 
 namespace MaIN.Core.UnitTests;
 
@@ -31,6 +32,17 @@ public class LocalModelAssetsTests
         Assert.Equal(
             ["sd3.5_large-Q4_0.gguf", "sd3.5_vae.safetensors", "clip_l.safetensors", "clip_g.safetensors", "t5xxl_fp8_e4m3fn.safetensors"],
             assets);
+    }
+
+    [Fact]
+    public void RequiredAssets_ForQwen3VisionModel_IncludesModelAndProjector()
+    {
+        var model = new Qwen3_VL_32b_Instruct();
+
+        var assets = model.RequiredAssets.ToList();
+
+        Assert.Equal([model.FileName, model.MMProjectName], assets.Select(asset => asset.FileName));
+        Assert.All(assets, asset => Assert.NotNull(asset.DownloadUrl));
     }
 
     [Fact]

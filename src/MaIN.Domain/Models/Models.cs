@@ -169,10 +169,20 @@ public static class Models
         public const string Qwen3_5_4b = "qwen3.5-4b";
         public const string Qwen3_5_9b = "qwen3.5-9b";
         public const string QwQ_7b = "qwq-7b";
+        public const string Qwen3_30b_A3B_Instruct2507 = "qwen3-30b-a3b-instruct-2507";
+        public const string Qwen3_Coder_30b_A3B = "qwen3-coder-30b-a3b";
+        public const string Qwen3_VL_32b_Instruct = "qwen3-vl-32b-instruct";
 
         // DeepSeek
         public const string DeepSeekR1_8b = "deepseekr1-8b";
         public const string DeepSeekR1_1_5b = "deepseekr1-1.5b";
+
+        // Modern 20B-100B models
+        public const string MagistralSmall_24b = "magistral-small-24b";
+        public const string GptOss_20b = "gpt-oss-20b";
+        public const string DevstralSmall2_24b = "devstral-small-2-24b";
+        public const string Exaone4_32b = "exaone-4-32b";
+        public const string Nemotron3Nano_30b_A3B = "nemotron-3-nano-30b-a3b";
 
         // Phi
         public const string Phi3_5_3b = "phi3.5-3b";

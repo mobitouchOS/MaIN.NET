@@ -7,12 +7,14 @@ using MaIN.Domain.Models.Abstract;
 using MaIN.Domain.Models.Concrete;
 using MaIN.Services.Services.Models;
 using MaIN.Services.Services.LLMService.Utils;
+using Microsoft.Extensions.Logging;
 
 namespace MaIN.InferPage.Endpoints;
 
 public static class OpenAiCompatEndpoints
 {
     private static ModelListResponse? _cachedModelsResponse;
+    private static ILogger? _logger;
 
     public static void InitializeModelCache()
     {
@@ -72,6 +74,8 @@ public static class OpenAiCompatEndpoints
 
     public static void MapOpenAiCompatEndpoints(this WebApplication app)
     {
+        _logger = app.Services.GetService<ILoggerFactory>()?.CreateLogger("MaIN.InferPage.Tools");
+
         app.MapGet("/v1/models", (HttpRequest request) =>
         {
             if (!IsAuthorized(request, out var authError))
@@ -557,9 +561,23 @@ public static class OpenAiCompatEndpoints
             result = await context.CompleteAsync(
                 toolCallback: invocation =>
                 {
-                    if (!invocation.Done && invocation.IsClientSide)
+                    if (invocation.IsClientSide)
                     {
-                        invocations.Add(invocation);
+                        if (!invocation.Done)
+                        {
+                            invocations.Add(invocation);
+                        }
+                        return Task.CompletedTask;
+                    }
+
+                    if (!invocation.Done)
+                    {
+                        _logger?.LogInformation("[Tool Invoke] {ToolName} | args: {Args}",
+                            invocation.ToolName, invocation.Arguments);
+                    }
+                    else
+                    {
+                        _logger?.LogInformation("[Tool Done]  {ToolName}", invocation.ToolName);
                     }
                     return Task.CompletedTask;
                 },
@@ -765,9 +783,23 @@ public static class OpenAiCompatEndpoints
             result = await context.CompleteAsync(
                 toolCallback: invocation =>
                 {
-                    if (!invocation.Done && invocation.IsClientSide)
+                    if (invocation.IsClientSide)
                     {
-                        invocations.Add(invocation);
+                        if (!invocation.Done)
+                        {
+                            invocations.Add(invocation);
+                        }
+                        return Task.CompletedTask;
+                    }
+
+                    if (!invocation.Done)
+                    {
+                        _logger?.LogInformation("[Tool Invoke] {ToolName} | args: {Args}",
+                            invocation.ToolName, invocation.Arguments);
+                    }
+                    else
+                    {
+                        _logger?.LogInformation("[Tool Done]  {ToolName}", invocation.ToolName);
                     }
                     return Task.CompletedTask;
                 },

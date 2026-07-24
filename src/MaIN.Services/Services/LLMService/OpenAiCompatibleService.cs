@@ -1014,15 +1014,15 @@ public abstract class OpenAiCompatibleService(
 
         if (chat.ToolsConfiguration?.Tools is not null && chat.ToolsConfiguration.Tools.Any())
         {
-            requestBody["tools"] = chat.ToolsConfiguration.Tools.Select(t => new
+            requestBody["tools"] = chat.ToolsConfiguration.Tools.Where(t => t.Function is not null).Select(t => new
             {
-                type = t.Type,
-                function = string.Equals(t.Type, "function", StringComparison.OrdinalIgnoreCase) && t.Function is not null ? new
+                type = "function",
+                function = new
                 {
-                    name = t.Function.Name,
+                    name = t.Function!.Name,
                     description = t.Function.Description,
                     parameters = t.Function.Parameters
-                } : null
+                }
             }).ToList();
 
             if (!string.IsNullOrEmpty(chat.ToolsConfiguration.ToolChoice))
