@@ -251,19 +251,46 @@
             }
 
             <div class="settings-field">
-                <label class="settings-label">OpenAI-Compatible API Key</label>
+                <label class="settings-label">API Key</label>
                 <div class="api-key-row">
-                    @{
-                        var configuredKey = Configuration["MaIN:ApiKey"] ?? Environment.GetEnvironmentVariable("MaIN__ApiKey");
-                        var isConfigured = !string.IsNullOrWhiteSpace(configuredKey);
-                    }
-                    <span class="api-key-hint" style="flex: 1;">
-                        Status: <strong>@(isConfigured ? "Configured (Secured via server environment/configuration)" : "Not configured (Unauthenticated access enabled)")</strong>
-                    </span>
+                    <FluentTextField @bind-Value="_mainApiKeyInput"
+                                     Placeholder="Enter API key to secure this instance"
+                                     TextFieldType="@(_showMainApiKey ? TextFieldType.Text : TextFieldType.Password)"
+                                     Style="flex: 1;" />
+                    <FluentButton Appearance="Appearance.Lightweight"
+                                  Style="--neutral-fill-stealth-rest: transparent; --neutral-fill-stealth-hover: rgba(128,128,128,0.15); --neutral-fill-stealth-active: rgba(128,128,128,0.25);"
+                                  OnClick="() => _showMainApiKey = !_showMainApiKey"
+                                  IconStart="@(_showMainApiKey
+                                      ? new Icons.Regular.Size20.EyeOff()
+                                      : (Icon)new Icons.Regular.Size20.Eye())">
+                    </FluentButton>
+                    <FluentButton Appearance="Appearance.Accent"
+                                  OnClick="@SaveMainApiKey"
+                                  Disabled="@(string.Equals(_mainApiKeyInput, _savedMainApiKeyPreview))">
+                        Save
+                    </FluentButton>
+                </div>
+                @if (!string.IsNullOrEmpty(_mainApiKeyStatus))
+                {
+                    <span class="api-key-hint">@_mainApiKeyStatus</span>
+                }
+                <span class="api-key-hint">
+                    Bearer token required by external clients calling this instance's
+                    <code>/v1/chat/completions</code> and <code>/v1/models</code> endpoints.
+                </span>
+            </div>
+
+            <div class="settings-field">
+                <label class="settings-label">API Playground</label>
+                <div style="display:flex;gap:8px;">
+                    <FluentButton Appearance="Appearance.Lightweight"
+                                  OnClick="@(() => NavigationManager.NavigateTo("/scalar/v1"))"
+                                  IconStart="@(new Icons.Regular.Size20.Globe())">
+                        Open Scalar Playground
+                    </FluentButton>
                 </div>
                 <span class="api-key-hint">
-                    Required as a Bearer token by external clients calling this instance's
-                    <code>/v1/chat/completions</code> and <code>/v1/models</code> endpoints. Configure <code>MaIN__ApiKey</code> environment variable or <code>MaIN:ApiKey</code> in server settings to secure these endpoints.
+                    Interactive API docs for <code>/v1/chat/completions</code>, <code>/v1/models</code>, and all other endpoints.
                 </span>
             </div>
 
@@ -314,6 +341,13 @@
     private string? _apiKeyInput;
     private string? _savedKeyPreview;
     private bool _showApiKey;
+
+    // Main API key (secures this instance's OpenAI-compatible endpoints)
+    private string? _mainApiKeyInput;
+    private string? _savedMainApiKeyPreview;
+    private string? _mainApiKeyStatus;
+    private bool _showMainApiKey;
+    private const string MainApiKeyStorageKey = "MaIN_API";
 
 
     // Vertex AI auth fields
@@ -521,6 +555,13 @@
         if (_selectedBackend != null)
             await LoadApiKeyPreview();
 
+        // Load saved main API key
+        var savedMainKey = await SettingsStorage.GetApiKeyForBackendAsync(MainApiKeyStorageKey);
+        if (!string.IsNullOrEmpty(savedMainKey))
+        {
+            _savedMainApiKeyPreview = savedMainKey;
+            _mainApiKeyInput = savedMainKey;
+        }
     }
 
     private async Task OnBackendChanged()
@@ -741,6 +782,25 @@
     private void ToggleApiKeyVisibility()
     {
         _showApiKey = !_showApiKey;
+    }
+
+    private async Task SaveMainApiKey()
+    {
+        if (string.IsNullOrWhiteSpace(_mainApiKeyInput))
+        {
+            _mainApiKeyStatus = "API key cleared. Endpoints are now unauthenticated.";
+            _savedMainApiKeyPreview = null;
+            await SettingsStorage.SaveApiKeyAsync(MainApiKeyStorageKey, "");
+            Environment.SetEnvironmentVariable("MaIN__ApiKey", "");
+            StateHasChanged();
+            return;
+        }
+
+        await SettingsStorage.SaveApiKeyAsync(MainApiKeyStorageKey, _mainApiKeyInput);
+        _savedMainApiKeyPreview = _mainApiKeyInput;
+        Environment.SetEnvironmentVariable("MaIN__ApiKey", _mainApiKeyInput);
+        _mainApiKeyStatus = "API key saved and applied. Restart required for full effect on all endpoints.";
+        StateHasChanged();
     }
 
     private async Task SaveAndApply()

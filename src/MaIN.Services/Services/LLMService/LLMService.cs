@@ -758,21 +758,32 @@ public class LLMService : ILLMService
 
     private static BaseSamplingPipeline CreateSampler(LocalInferenceParams inferenceParams)
     {
+        Grammar? llamaGrammar = null;
+        
+        if (inferenceParams.Grammar is not null)
+        {
+            var grammarValue = inferenceParams.Grammar.Value;
+            
+            if (inferenceParams.Grammar.Format == MaIN.Domain.Models.GrammarFormat.JSONSchema)
+            {
+                var converter = new MaIN.Services.Utils.JsonSchemaToGbnfConverter();
+                grammarValue = converter.Convert(inferenceParams.Grammar);
+            }
+            
+            llamaGrammar = new Grammar(grammarValue, "root");
+        }
+        
         return inferenceParams.Temperature == 0
             ? new GreedySamplingPipeline()
             {
-                Grammar = inferenceParams.Grammar is not null
-                    ? new Grammar(inferenceParams.Grammar.Value, "root")
-                    : null
+                Grammar = llamaGrammar
             }
             : new DefaultSamplingPipeline()
             {
                 Temperature = inferenceParams.Temperature,
                 TopP = inferenceParams.TopP,
                 TopK = inferenceParams.TopK,
-                Grammar = inferenceParams.Grammar is not null
-                    ? new Grammar(inferenceParams.Grammar.Value, "root")
-                    : null
+                Grammar = llamaGrammar
             };
     }
 
