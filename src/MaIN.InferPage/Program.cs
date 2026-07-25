@@ -229,6 +229,50 @@ app.MapOpenAiCompatEndpoints();
 // (not just in Development) since self-hosted InferPage instances are commonly run in
 // Docker/Production and this is the primary way an operator tests the API by hand.
 app.MapOpenApi();
-app.MapScalarApiReference();
+app.MapScalarApiReference(options =>
+{
+    options
+        .WithTitle("MaIN.InferAPI")
+        .WithTheme(ScalarTheme.BluePlanet)
+        .ForceDarkMode()
+        .HideSearch()
+        .ExpandAllTags()
+        .SortTagsAlphabetically()
+        .SortOperationsByMethod()
+        .PreserveSchemaPropertyOrder()
+        .AddServer("http://localhost:5555", "Local")
+        .WithDefaultHttpClient(ScalarTarget.CSharp, ScalarClient.HttpClient)
+        .AddHeadContent("""
+            <style>
+              .scalar-api-reference { --scalar-font: 'Inter', system-ui, sans-serif; }
+              .scalar-api-reference-header { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%) !important; }
+              .scalar-api-reference-header h1 { color: #e94560 !important; font-weight: 800 !important; }
+            </style>
+            """)
+        .AddHeaderContent("""
+            <div style="padding: 10px 20px; background: #0d1117; border-bottom: 1px solid #30363d; color: #c9d1d9; font-family: system-ui, sans-serif; font-size: 12px; line-height: 1.5;">
+              <div style="max-width: 960px; margin: 0 auto;">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+                  <span style="background: #e94560; color: #fff; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 10px; text-transform: uppercase;">MaIN.InferAPI</span>
+                  <span style="color: #8b949e;">OpenAI-compatible local inference — structured output, tool calling, multi-model</span>
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;">
+                  <div style="background: #161b22; border: 1px solid #30363d; border-radius: 4px; padding: 6px 8px;">
+                    <div style="font-weight: 600; color: #58a6ff; font-size: 11px;">Structured Output</div>
+                    <div style="color: #8b949e; font-size: 11px;"><code style="background:#1f2937;padding:0 3px;border-radius:2px;">response_format</code> + <code style="background:#1f2937;padding:0 3px;border-radius:2px;">json_schema</code></div>
+                  </div>
+                  <div style="background: #161b22; border: 1px solid #30363d; border-radius: 4px; padding: 6px 8px;">
+                    <div style="font-weight: 600; color: #58a6ff; font-size: 11px;">Tool Calling</div>
+                    <div style="color: #8b949e; font-size: 11px;">7 hosted tools — web_search, http_request, etc.</div>
+                  </div>
+                  <div style="background: #161b22; border: 1px solid #30363d; border-radius: 4px; padding: 6px 8px;">
+                    <div style="font-weight: 600; color: #58a6ff; font-size: 11px;">Dynamic Loading</div>
+                    <div style="color: #8b949e; font-size: 11px;">Drop GGUF files, switch via <code style="background:#1f2937;padding:0 3px;border-radius:2px;">model</code> field</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            """);
+});
 
 app.Run();

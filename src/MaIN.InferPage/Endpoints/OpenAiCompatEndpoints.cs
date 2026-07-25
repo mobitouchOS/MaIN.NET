@@ -7,7 +7,9 @@ using MaIN.Domain.Models.Abstract;
 using MaIN.Domain.Models.Concrete;
 using MaIN.Services.Services.Models;
 using MaIN.Services.Services.LLMService.Utils;
+using Microsoft.AspNetCore.OpenApi;
 using Microsoft.Extensions.Logging;
+using Microsoft.OpenApi;
 
 namespace MaIN.InferPage.Endpoints;
 
@@ -126,13 +128,13 @@ public static class OpenAiCompatEndpoints
                 return BadRequest("The 'messages' field is required and must not be empty.");
             }
 
-            if (string.IsNullOrEmpty(Utils.Model))
+            if (string.IsNullOrEmpty(request.Model))
             {
-                return NotFoundModel(request.Model ?? string.Empty);
+                return BadRequest("The 'model' field is required.");
             }
 
-            if (!string.IsNullOrEmpty(request.Model) &&
-                !string.Equals(request.Model, Utils.Model, StringComparison.OrdinalIgnoreCase))
+            var resolvedModelId = ResolveModelId(request.Model);
+            if (resolvedModelId is null)
             {
                 return NotFoundModel(request.Model);
             }
@@ -144,7 +146,7 @@ public static class OpenAiCompatEndpoints
             // IChatConfigurationBuilder that WithMessages(...) unlocks -- so WithMessages must be
             // called before WithSystemPrompt, even though WithSystemPrompt always inserts at index 0
             // regardless of call order.
-            var configuredContext = AIHub.Chat().WithModel(Utils.Model).EnsureModelDownloaded().WithMessages(messages);
+            var configuredContext = AIHub.Chat().WithModel(resolvedModelId).EnsureModelDownloaded().WithMessages(messages);
             if (!string.IsNullOrEmpty(systemPrompt))
             {
                 configuredContext.WithSystemPrompt(systemPrompt);
@@ -157,12 +159,12 @@ public static class OpenAiCompatEndpoints
 
             if (request.Tools is { Count: > 0 })
             {
-                return await HandleToolCallingRequest(configuredContext, request, promptText, isStreaming, httpResponse, ct);
+                return await HandleToolCallingRequest(configuredContext, request, promptText, isStreaming, httpResponse, resolvedModelId, ct);
             }
 
             if (isStreaming)
             {
-                return await HandleStreamingRequest(configuredContext, httpResponse, ct);
+                return await HandleStreamingRequest(configuredContext, resolvedModelId, httpResponse, ct);
             }
 
             ChatResult result;
@@ -177,7 +179,7 @@ public static class OpenAiCompatEndpoints
 
             var response = new ChatCompletionResponse
             {
-                Model = Utils.Model,
+                Model = resolvedModelId,
                 Created = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
                 Choices =
                 [
@@ -196,11 +198,97 @@ public static class OpenAiCompatEndpoints
         .WithName("CreateChatCompletion")
         .WithTags("OpenAI-Compatible API")
         .WithSummary("OpenAI-compatible chat completions -- supports streaming (SSE), tool calling, and response_format.")
+        .WithDescription("Set 'model' to your loaded GGUF filename (without .gguf). Example models: granite-4.1-3b, lfm2-1.2b, Llama3.2-1b.")
         .Accepts<ChatCompletionRequest>("application/json")
         .Produces<ChatCompletionResponse>()
         .Produces<OpenAiErrorResponse>(StatusCodes.Status400BadRequest)
         .Produces<OpenAiErrorResponse>(StatusCodes.Status401Unauthorized)
-        .Produces<OpenAiErrorResponse>(StatusCodes.Status404NotFound);
+        .Produces<OpenAiErrorResponse>(StatusCodes.Status404NotFound)
+        .WithOpenApi(operation =>
+        {
+            var examples = new Dictionary<string, IOpenApiExample>
+            {
+                ["simple-chat"] = new OpenApiExample
+                {
+                    Summary = "Simple chat",
+                    Value = JsonSerializer.SerializeToNode(new
+                    {
+                        model = "granite-4.1-3b",
+                        messages = new[] { new { role = "user", content = "What is the capital of France?" } }
+                    })
+                },
+                ["structured-output"] = new OpenApiExample
+                {
+                    Summary = "Structured output (JSON Schema)",
+                    Value = JsonSerializer.SerializeToNode(new
+                    {
+                        model = "granite-4.1-3b",
+                        messages = new[] { new { role = "user", content = "Tell me about Elon Musk" } },
+                        response_format = new
+                        {
+                            type = "json_schema",
+                            json_schema = new
+                            {
+                                name = "person",
+                                schema = new
+                                {
+                                    type = "object",
+                                    properties = new
+                                    {
+                                        name = new { type = "string" },
+                                        birth_year = new { type = "integer" },
+                                        nationality = new { type = "string" }
+                                    },
+                                    required = new[] { "name", "birth_year", "nationality" }
+                                }
+                            }
+                        }
+                    })
+                },
+                ["tool-calling"] = new OpenApiExample
+                {
+                    Summary = "Tool calling",
+                    Value = JsonSerializer.SerializeToNode(new
+                    {
+                        model = "granite-4.1-3b",
+                        messages = new[] { new { role = "user", content = "What's the weather in Warsaw?" } },
+                        tools = new[]
+                        {
+                            new
+                            {
+                                type = "function",
+                                function = new
+                                {
+                                    name = "get_weather",
+                                    description = "Get current weather for a city",
+                                    parameters = new
+                                    {
+                                        type = "object",
+                                        properties = new
+                                        {
+                                            city = new { type = "string", description = "City name" }
+                                        },
+                                        required = new[] { "city" }
+                                    }
+                                }
+                            }
+                        }
+                    })
+                }
+            };
+            operation.RequestBody = new OpenApiRequestBody
+            {
+                Description = "Chat completion request. Replace 'model' with your loaded GGUF filename.",
+                Content = new Dictionary<string, OpenApiMediaType>
+                {
+                    ["application/json"] = new OpenApiMediaType
+                    {
+                        Examples = examples
+                    }
+                }
+            };
+            return operation;
+        });
 
         app.MapPost("/v1/responses", async (HttpRequest httpRequest, HttpResponse httpResponse, CancellationToken ct) =>
         {
@@ -224,15 +312,20 @@ public static class OpenAiCompatEndpoints
                 return BadRequest("Request body cannot be null.");
             }
 
-            if (!string.IsNullOrEmpty(request.Model) &&
-                !string.Equals(request.Model, Utils.Model, StringComparison.OrdinalIgnoreCase))
+            if (string.IsNullOrEmpty(request.Model))
+            {
+                return BadRequest("The 'model' field is required.");
+            }
+
+            var resolvedModelId = ResolveModelId(request.Model);
+            if (resolvedModelId is null)
             {
                 return NotFoundModel(request.Model);
             }
 
             var (systemPrompt, messages) = OpenAiMessageMapper.ToMainMessages(request);
 
-            var configuredContext = AIHub.Chat().WithModel(Utils.Model).EnsureModelDownloaded().WithMessages(messages);
+            var configuredContext = AIHub.Chat().WithModel(resolvedModelId).EnsureModelDownloaded().WithMessages(messages);
             if (!string.IsNullOrEmpty(systemPrompt))
             {
                 configuredContext.WithSystemPrompt(systemPrompt);
@@ -245,12 +338,12 @@ public static class OpenAiCompatEndpoints
 
             if (request.Tools is { Count: > 0 })
             {
-                return await HandleResponsesToolCallingRequest(configuredContext, request, promptText, isStreaming, httpResponse, ct);
+                return await HandleResponsesToolCallingRequest(configuredContext, request, promptText, isStreaming, httpResponse, resolvedModelId, ct);
             }
 
             if (isStreaming)
             {
-                return await HandleResponsesStreamingRequest(configuredContext, promptText, httpResponse, ct);
+                return await HandleResponsesStreamingRequest(configuredContext, promptText, httpResponse, resolvedModelId, ct);
             }
 
             ChatResult result;
@@ -265,7 +358,7 @@ public static class OpenAiCompatEndpoints
 
             var response = new ResponsesResponse
             {
-                Model = Utils.Model ?? string.Empty,
+                Model = resolvedModelId,
                 CreatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
                 Status = "completed",
                 Output = [new ResponseOutputItemMessage { Role = "assistant", Content = [new ResponseOutputContentText { Text = result.Message.Content ?? string.Empty }] }],
@@ -290,6 +383,47 @@ public static class OpenAiCompatEndpoints
         var requiredApiKey = configuration?["MaIN:ApiKey"] ?? Environment.GetEnvironmentVariable("MaIN__ApiKey");
         var header = request.Headers.Authorization.ToString();
         return OpenAiApiKeyAuth.IsAuthorized(string.IsNullOrEmpty(header) ? null : header, requiredApiKey, out error);
+    }
+
+    private static string? ResolveModelId(string requestedModel)
+    {
+        if (string.IsNullOrWhiteSpace(requestedModel))
+            return null;
+
+        if (Utils.BackendType != BackendType.Self)
+        {
+            return string.Equals(requestedModel, Utils.Model, StringComparison.OrdinalIgnoreCase)
+                ? Utils.Model
+                : null;
+        }
+
+        if (ModelRegistry.TryGetById(requestedModel, out var model))
+            return model.Id;
+
+        var modelsDir = !string.IsNullOrEmpty(Utils.Path)
+            ? Utils.Path
+            : Utils.DefaultModelsPath;
+
+        if (!Directory.Exists(modelsDir))
+            return null;
+
+        var fileName = requestedModel.EndsWith(".gguf", StringComparison.OrdinalIgnoreCase)
+            ? requestedModel
+            : requestedModel + ".gguf";
+
+        var fullPath = Path.Combine(modelsDir, fileName);
+        if (File.Exists(fullPath))
+        {
+            var existing = ModelRegistry.GetByFileName(fileName);
+            if (existing is not null)
+                return existing.Id;
+
+            var newModel = new GenericLocalModel(FileName: fileName, Id: requestedModel);
+            ModelRegistry.RegisterOrReplace(newModel);
+            return newModel.Id;
+        }
+
+        return null;
     }
 
     private static IResult BadRequest(string message) => Results.Json(
@@ -403,6 +537,7 @@ public static class OpenAiCompatEndpoints
 
     private static async Task<IResult> HandleStreamingRequest(
         MaIN.Core.Hub.Contexts.Interfaces.ChatContext.IChatConfigurationBuilder context,
+        string modelId,
         HttpResponse response,
         CancellationToken ct)
     {
@@ -427,7 +562,7 @@ public static class OpenAiCompatEndpoints
                     {
                         Id = chunkId,
                         Created = created,
-                        Model = Utils.Model ?? string.Empty,
+                        Model = modelId,
                         Choices =
                         [
                             new ChatCompletionChunkChoice
@@ -471,7 +606,7 @@ public static class OpenAiCompatEndpoints
         {
             Id = chunkId,
             Created = created,
-            Model = Utils.Model ?? string.Empty,
+            Model = modelId,
             Choices =
             [
                 new ChatCompletionChunkChoice { Index = 0, Delta = new ChatCompletionChunkDelta(), FinishReason = "stop" }
@@ -489,6 +624,7 @@ public static class OpenAiCompatEndpoints
         string promptText,
         bool isStreaming,
         HttpResponse response,
+        string modelId,
         CancellationToken ct)
     {
         var httpClientFactory = response.HttpContext.RequestServices.GetService<IHttpClientFactory>();
@@ -611,7 +747,7 @@ public static class OpenAiCompatEndpoints
         {
             var completionResponse = new ChatCompletionResponse
             {
-                Model = Utils.Model ?? string.Empty,
+                Model = modelId,
                 Created = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
                 Choices = [new ChatCompletionChoice { Index = 0, Message = message, FinishReason = finishReason }],
                 Usage = OpenAiUsageEstimator.Estimate(promptText, message.Content ?? string.Empty)
@@ -628,7 +764,7 @@ public static class OpenAiCompatEndpoints
         {
             Id = $"chatcmpl-{Guid.NewGuid():N}",
             Created = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-            Model = Utils.Model ?? string.Empty,
+            Model = modelId,
             Choices =
             [
                 new ChatCompletionChunkChoice
@@ -649,6 +785,7 @@ public static class OpenAiCompatEndpoints
         MaIN.Core.Hub.Contexts.Interfaces.ChatContext.IChatConfigurationBuilder context,
         string promptText,
         HttpResponse response,
+        string modelId,
         CancellationToken ct)
     {
         response.ContentType = "text/event-stream";
@@ -660,7 +797,7 @@ public static class OpenAiCompatEndpoints
         var fullText = string.Empty;
         var itemAdded = false;
 
-        await response.WriteAsync($"event: response.created\ndata: {JsonSerializer.Serialize(new { response = new { id = responseId, @object = "response", status = "in_progress", created_at = created, model = Utils.Model ?? string.Empty } }, OpenAiJsonOptions.Options)}\n\n", ct);
+        await response.WriteAsync($"event: response.created\ndata: {JsonSerializer.Serialize(new { response = new { id = responseId, @object = "response", status = "in_progress", created_at = created, model = modelId } }, OpenAiJsonOptions.Options)}\n\n", ct);
         await response.Body.FlushAsync(ct);
 
         try
@@ -711,7 +848,7 @@ public static class OpenAiCompatEndpoints
         var finalResponse = new ResponsesResponse
         {
             Id = responseId,
-            Model = Utils.Model ?? string.Empty,
+            Model = modelId,
             CreatedAt = created,
             Status = "completed",
             Output = [finalItem],
@@ -728,6 +865,7 @@ public static class OpenAiCompatEndpoints
         string promptText,
         bool isStreaming,
         HttpResponse response,
+        string modelId,
         CancellationToken ct)
     {
         var httpClientFactory = response.HttpContext.RequestServices.GetService<IHttpClientFactory>();
@@ -825,7 +963,7 @@ public static class OpenAiCompatEndpoints
         var completionResponse = new ResponsesResponse
         {
             Id = $"resp_{Guid.NewGuid():N}",
-            Model = Utils.Model ?? string.Empty,
+            Model = modelId,
             CreatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
             Status = "completed",
             Output = outputItems,
