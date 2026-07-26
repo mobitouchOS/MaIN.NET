@@ -128,15 +128,10 @@ public static class OpenAiCompatEndpoints
                 return BadRequest("The 'messages' field is required and must not be empty.");
             }
 
-            if (string.IsNullOrEmpty(request.Model))
-            {
-                return BadRequest("The 'model' field is required.");
-            }
-
             var resolvedModelId = ResolveModelId(request.Model);
             if (resolvedModelId is null)
             {
-                return NotFoundModel(request.Model);
+                return NotFoundModel(request.Model ?? string.Empty);
             }
 
             var (systemPrompt, messages) = OpenAiMessageMapper.ToMainMessages(request.Messages);
@@ -312,15 +307,10 @@ public static class OpenAiCompatEndpoints
                 return BadRequest("Request body cannot be null.");
             }
 
-            if (string.IsNullOrEmpty(request.Model))
-            {
-                return BadRequest("The 'model' field is required.");
-            }
-
             var resolvedModelId = ResolveModelId(request.Model);
             if (resolvedModelId is null)
             {
-                return NotFoundModel(request.Model);
+                return NotFoundModel(request.Model ?? string.Empty);
             }
 
             var (systemPrompt, messages) = OpenAiMessageMapper.ToMainMessages(request);
@@ -385,8 +375,11 @@ public static class OpenAiCompatEndpoints
         return OpenAiApiKeyAuth.IsAuthorized(string.IsNullOrEmpty(header) ? null : header, requiredApiKey, out error);
     }
 
-    private static string? ResolveModelId(string requestedModel)
+    private static string? ResolveModelId(string? requestedModel)
     {
+        if (string.IsNullOrWhiteSpace(requestedModel))
+            requestedModel = Utils.Model;
+
         if (string.IsNullOrWhiteSpace(requestedModel))
             return null;
 
