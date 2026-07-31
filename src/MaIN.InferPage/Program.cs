@@ -50,6 +50,7 @@ builder.Services.AddScoped<SettingsStateService>();
 builder.Services.AddOpenApi();
 
 builder.Services.AddSingleton<ApiLogService>();
+builder.Services.AddSingleton<AgentDefinitionService>();
 
 if (!builder.Environment.IsDevelopment())
 {
