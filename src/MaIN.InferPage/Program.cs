@@ -51,6 +51,7 @@ builder.Services.AddOpenApi();
 
 builder.Services.AddSingleton<ApiLogService>();
 builder.Services.AddSingleton<AgentDefinitionService>();
+builder.Services.AddSingleton<AgentRunner>();
 
 if (!builder.Environment.IsDevelopment())
 {

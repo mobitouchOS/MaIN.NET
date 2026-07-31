@@ -2,7 +2,10 @@ using System.Text.Json;
 using MaIN.Core.Hub;
 using MaIN.Core.Hub.Utils;
 using MaIN.Domain.Configuration;
+using MaIN.Domain.Entities;
 using MaIN.Domain.Entities.Tools;
+using MaIN.Domain.Exceptions.Agents;
+using MaIN.InferPage.Services;
 using MaIN.Domain.Models.Abstract;
 using MaIN.Domain.Models.Concrete;
 using MaIN.Services.Services.Models;
@@ -78,17 +81,17 @@ public static class OpenAiCompatEndpoints
     {
         _logger = app.Services.GetService<ILoggerFactory>()?.CreateLogger("MaIN.InferPage.Tools");
 
-        app.MapGet("/v1/models", (HttpRequest request) =>
+        app.MapGet("/v1/models", async (HttpRequest request) =>
         {
             if (!IsAuthorized(request, out var authError))
             {
                 return Results.Json(authError, OpenAiJsonOptions.Options, statusCode: StatusCodes.Status401Unauthorized);
             }
 
-            var response = _cachedModelsResponse;
-            if (response is null)
+            var cached = _cachedModelsResponse;
+            if (cached is null)
             {
-                response = Utils.BackendType != BackendType.Self
+                cached = Utils.BackendType != BackendType.Self
                     ? new ModelListResponse
                     {
                         Data = string.IsNullOrEmpty(Utils.Model)
@@ -98,7 +101,21 @@ public static class OpenAiCompatEndpoints
                     : BuildSelfModelsResponse();
             }
 
-            return Results.Json(response, OpenAiJsonOptions.Options);
+            // Agents are resolved per request (not baked into the startup cache) and appended to the
+            // model list; a fresh response object avoids mutating the shared cached instance.
+            var data = new List<ModelData>(cached.Data);
+            var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            foreach (var agent in await AIHub.Agent().GetAllAgents())
+            {
+                data.Add(new ModelData
+                {
+                    Id = AgentModelRef.Format(agent.Id),
+                    Created = now,
+                    OwnedBy = "main-inferpage-agent"
+                });
+            }
+
+            return Results.Json(new ModelListResponse { Object = cached.Object, Data = data }, OpenAiJsonOptions.Options);
         })
         .WithName("ListModels")
         .WithTags("OpenAI-Compatible API")
@@ -106,7 +123,7 @@ public static class OpenAiCompatEndpoints
         .Produces<ModelListResponse>()
         .Produces<OpenAiErrorResponse>(StatusCodes.Status401Unauthorized);
 
-        app.MapPost("/v1/chat/completions", async (HttpRequest httpRequest, HttpResponse httpResponse, CancellationToken ct) =>
+        app.MapPost("/v1/chat/completions", async (HttpRequest httpRequest, HttpResponse httpResponse, AgentRunner agentRunner, CancellationToken ct) =>
         {
             if (!IsAuthorized(httpRequest, out var authError))
             {
@@ -126,6 +143,67 @@ public static class OpenAiCompatEndpoints
             if (request is null || request.Messages.Count == 0)
             {
                 return BadRequest("The 'messages' field is required and must not be empty.");
+            }
+
+            if (AgentModelRef.TryParse(request.Model, out var agentId))
+            {
+                // Streaming returns a single terminal SSE frame; per-token streaming is Phase 6.
+                var (_, agentMessages) = OpenAiMessageMapper.ToMainMessages(request.Messages);
+                if (agentMessages.Count == 0)
+                {
+                    return BadRequest("The 'messages' field is required and must not be empty.");
+                }
+
+                var (agentResult, agentError) = await TryRunAgentAsync(agentRunner, agentId, agentMessages, request.Model ?? string.Empty, ct);
+                if (agentError is not null)
+                {
+                    return agentError;
+                }
+
+                var agentPromptText = string.Join('\n', agentMessages.Select(m => m.Content));
+
+                if (request.Stream != true)
+                {
+                    var agentResponse = new ChatCompletionResponse
+                    {
+                        Model = request.Model!,
+                        Created = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                        Choices =
+                        [
+                            new ChatCompletionChoice
+                            {
+                                Index = 0,
+                                Message = new ChatCompletionResponseMessage { Role = "assistant", Content = agentResult!.Content },
+                                FinishReason = "stop"
+                            }
+                        ],
+                        Usage = OpenAiUsageEstimator.Estimate(agentPromptText, agentResult.Content)
+                    };
+
+                    return Results.Json(agentResponse, OpenAiJsonOptions.Options);
+                }
+
+                httpResponse.ContentType = "text/event-stream";
+                httpResponse.Headers.CacheControl = "no-cache";
+                var agentChunk = new ChatCompletionChunk
+                {
+                    Id = $"chatcmpl-{Guid.NewGuid():N}",
+                    Created = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                    Model = request.Model!,
+                    Choices =
+                    [
+                        new ChatCompletionChunkChoice
+                        {
+                            Index = 0,
+                            Delta = new ChatCompletionChunkDelta { Role = "assistant", Content = agentResult!.Content },
+                            FinishReason = "stop"
+                        }
+                    ]
+                };
+                await httpResponse.WriteAsync($"data: {JsonSerializer.Serialize(agentChunk, OpenAiJsonOptions.Options)}\n\n", ct);
+                await httpResponse.WriteAsync("data: [DONE]\n\n", ct);
+                await httpResponse.Body.FlushAsync(ct);
+                return Results.Empty;
             }
 
             var resolvedModelId = ResolveModelId(request.Model);
@@ -285,7 +363,7 @@ public static class OpenAiCompatEndpoints
             return operation;
         });
 
-        app.MapPost("/v1/responses", async (HttpRequest httpRequest, HttpResponse httpResponse, CancellationToken ct) =>
+        app.MapPost("/v1/responses", async (HttpRequest httpRequest, HttpResponse httpResponse, AgentRunner agentRunner, CancellationToken ct) =>
         {
             if (!IsAuthorized(httpRequest, out var authError))
             {
@@ -305,6 +383,49 @@ public static class OpenAiCompatEndpoints
             if (request is null)
             {
                 return BadRequest("Request body cannot be null.");
+            }
+
+            if (AgentModelRef.TryParse(request.Model, out var agentId))
+            {
+                // Streaming returns a single terminal SSE frame; per-token streaming is Phase 6.
+                var (_, agentMessages) = OpenAiMessageMapper.ToMainMessages(request);
+                if (agentMessages.Count == 0)
+                {
+                    return BadRequest("The 'input' field is required and must not be empty.");
+                }
+
+                var (agentResult, agentError) = await TryRunAgentAsync(agentRunner, agentId, agentMessages, request.Model ?? string.Empty, ct);
+                if (agentError is not null)
+                {
+                    return agentError;
+                }
+
+                var agentPromptText = string.Join('\n', agentMessages.Select(m => m.Content));
+                var agentItem = new ResponseOutputItemMessage { Id = $"msg_{Guid.NewGuid():N}", Role = "assistant", Content = [new ResponseOutputContentText { Text = agentResult!.Content }] };
+                var agentResponse = new ResponsesResponse
+                {
+                    Id = $"resp_{Guid.NewGuid():N}",
+                    Model = request.Model!,
+                    CreatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                    Status = "completed",
+                    Output = [agentItem],
+                    Usage = OpenAiUsageEstimator.Estimate(agentPromptText, agentResult.Content)
+                };
+
+                if (request.Stream != true)
+                {
+                    return Results.Json(agentResponse, OpenAiJsonOptions.Options);
+                }
+
+                httpResponse.ContentType = "text/event-stream";
+                httpResponse.Headers.CacheControl = "no-cache";
+                await httpResponse.WriteAsync($"event: response.created\ndata: {JsonSerializer.Serialize(new { response = new { id = agentResponse.Id, @object = "response", status = "in_progress", created_at = agentResponse.CreatedAt, model = agentResponse.Model } }, OpenAiJsonOptions.Options)}\n\n", ct);
+                await httpResponse.WriteAsync($"event: response.output_item.added\ndata: {JsonSerializer.Serialize(new { response_id = agentResponse.Id, output_index = 0, item = agentItem }, OpenAiJsonOptions.Options)}\n\n", ct);
+                await httpResponse.WriteAsync($"event: response.output_text.done\ndata: {JsonSerializer.Serialize(new { response_id = agentResponse.Id, item_id = agentItem.Id, output_index = 0, content_index = 0, text = agentResult.Content }, OpenAiJsonOptions.Options)}\n\n", ct);
+                await httpResponse.WriteAsync($"event: response.output_item.done\ndata: {JsonSerializer.Serialize(new { response_id = agentResponse.Id, output_index = 0, item = agentItem }, OpenAiJsonOptions.Options)}\n\n", ct);
+                await httpResponse.WriteAsync($"event: response.done\ndata: {JsonSerializer.Serialize(new { response = agentResponse }, OpenAiJsonOptions.Options)}\n\n", ct);
+                await httpResponse.Body.FlushAsync(ct);
+                return Results.Empty;
             }
 
             var resolvedModelId = ResolveModelId(request.Model);
@@ -527,6 +648,27 @@ public static class OpenAiCompatEndpoints
         ErrorResponse(ex),
         OpenAiJsonOptions.Options,
         statusCode: StatusCodes.Status500InternalServerError);
+
+    // Returns (result, null) on success, (null, error) on failure -- error already mapped to 404/500.
+    private static async Task<(AgentRunResult? Result, IResult? Error)> TryRunAgentAsync(
+        AgentRunner agentRunner, string agentId, IReadOnlyList<Message> messages, string requestedModel,
+        CancellationToken ct)
+    {
+        try
+        {
+            var result = await agentRunner.RunAsync(agentId, messages, ct: ct);
+            return (result, null);
+        }
+        catch (AgentNotFoundException)
+        {
+            return (null, NotFoundModel(requestedModel));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger?.LogError(ex, "Agent run failed for {AgentId}", agentId);
+            return (null, ServerError(ex));
+        }
+    }
 
     private static async Task<IResult> HandleStreamingRequest(
         MaIN.Core.Hub.Contexts.Interfaces.ChatContext.IChatConfigurationBuilder context,

@@ -41,6 +41,7 @@ public abstract class InferPageEndpointTestBase : IAsyncLifetime
         builder.Services.AddMaIN(builder.Configuration);
         builder.Services.AddSingleton<IHttpClientFactory>(FakeClientFactory);
         builder.Services.AddSingleton(new MaINSettings { OpenAiKey = "test-openai-key" });
+        builder.Services.AddSingleton<Services.AgentRunner>();
 
         _app = builder.Build();
         _app.Services.UseMaIN();
