@@ -12,8 +12,8 @@
 
 <link rel="stylesheet" href="settings.css">
 
-<div class="settings-overlay">
-    <div class="settings-panel">
+<div class="settings-overlay" @onclick="@(() => ShowCloseButton ? OnClose.InvokeAsync() : Task.CompletedTask)">
+    <div class="settings-panel" @onclick:stopPropagation="true">
         <div class="settings-header">
             <h2>Settings</h2>
             @if (ShowCloseButton)

@@ -5,8 +5,8 @@
 
 <link rel="stylesheet" href="agents.css">
 
-<div class="settings-overlay">
-    <div class="settings-panel agents-panel">
+<div class="settings-overlay" @onclick="@(() => OnClose.InvokeAsync())">
+    <div class="settings-panel agents-panel" @onclick:stopPropagation="true">
         <div class="settings-header">
             <h2>Agents</h2>
             <FluentButton Appearance="Appearance.Lightweight"
