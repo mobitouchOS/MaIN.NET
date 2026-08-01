@@ -1,0 +1,12 @@
+.agents-container { padding: 1.5rem; max-width: 1100px; margin: 0 auto; }
+.agents-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
+.agents-list, .agents-form { display: flex; flex-direction: column; gap: 0.75rem; }
+.agents-form label { font-weight: 600; margin-top: 0.5rem; }
+.agent-card { display: flex; align-items: center; justify-content: space-between;
+    border: 1px solid var(--neutral-stroke-rest); border-radius: 8px; padding: 0.75rem 1rem; }
+.agent-card-main { display: flex; flex-direction: column; gap: 0.15rem; }
+.agent-ref { font-size: 0.75rem; opacity: 0.7; }
+.tool-list { display: flex; flex-direction: column; gap: 0.4rem; }
+.muted { opacity: 0.6; }
+.error { color: var(--error-foreground-rest); }
+@media (max-width: 800px) { .agents-layout { grid-template-columns: 1fr; } }

@@ -54,6 +54,13 @@
         <FluentButton Style="background-color: transparent;"
                       BackgroundColor="rgba(0, 0, 0, 0)"
                       Appearance="Appearance.Lightweight"
+                      OnClick="@(() => _navigationManager.NavigateTo("/agents"))"
+                      IconStart="@(new Icons.Regular.Size24.Bot().WithColor(AccentColor))"
+                      Title="Agents">
+        </FluentButton>
+        <FluentButton Style="background-color: transparent;"
+                      BackgroundColor="rgba(0, 0, 0, 0)"
+                      Appearance="Appearance.Lightweight"
                       OnClick="@(() => SettingsState.RequestSettings())" IconStart="@(new Icons.Regular.Size24.Settings().WithColor(AccentColor))">
         </FluentButton>
         <FluentButton Style="padding: 10px; background-color: transparent;"
