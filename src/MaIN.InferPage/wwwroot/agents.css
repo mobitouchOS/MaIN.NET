@@ -1,4 +1,48 @@
-.agents-container { padding: 1.5rem; max-width: 1100px; margin: 0 auto; }
+/* Overlay/backdrop/blur mirrors settings.css so the agents panel matches Settings. */
+.settings-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 5000;
+    backdrop-filter: blur(3px);
+}
+
+.settings-panel {
+    background: var(--neutral-layer-1);
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    max-height: 95vh;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+}
+
+.settings-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--neutral-stroke-rest);
+}
+
+.settings-header h2 {
+    margin: 0;
+    color: var(--accent-base-color);
+    font-size: 1.25rem;
+}
+
+.settings-body {
+    padding: 20px 24px;
+}
+
+.agents-panel { width: 60vw; min-width: 640px; max-width: 90vw; }
+
 .agents-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
 .agents-list, .agents-form { display: flex; flex-direction: column; gap: 0.75rem; }
 .agents-form label { font-weight: 600; margin-top: 0.5rem; }
@@ -9,4 +53,8 @@
 .tool-list { display: flex; flex-direction: column; gap: 0.4rem; }
 .muted { opacity: 0.6; }
 .error { color: var(--error-foreground-rest); }
-@media (max-width: 800px) { .agents-layout { grid-template-columns: 1fr; } }
+
+@media (max-width: 800px) {
+    .agents-panel { width: 95vw; min-width: 0; }
+    .agents-layout { grid-template-columns: 1fr; }
+}

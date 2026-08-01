@@ -47,6 +47,7 @@ builder.Services.AddRazorComponents()
 builder.Services.AddFluentUIComponents();
 builder.Services.AddScoped<SettingsService>();
 builder.Services.AddScoped<SettingsStateService>();
+builder.Services.AddScoped<AgentsPanelStateService>();
 builder.Services.AddOpenApi();
 
 builder.Services.AddSingleton<ApiLogService>();

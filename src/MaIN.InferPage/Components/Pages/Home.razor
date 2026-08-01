@@ -3,6 +3,7 @@
 @inject IJSRuntime JS
 @inject SettingsService SettingsStorage
 @inject SettingsStateService SettingsState
+@inject AgentsPanelStateService AgentsPanelState
 @inject MaINSettings MaINSettings
 @implements IDisposable
 @using MaIN.Core.Hub
@@ -29,6 +30,11 @@
     <Settings ShowCloseButton="@_hasExistingConfig"
               OnSettingsApplied="@HandleSettingsApplied"
               OnClose="@HideSettings" />
+}
+
+@if (_showAgents)
+{
+    <AgentsPanel OnClose="@(() => { _showAgents = false; })" />
 }
 
 <div class="chat-container" id="chat-container">
@@ -218,6 +224,7 @@
 
 @code {
     private bool _showSettings;
+    private bool _showAgents;
     private bool _hasExistingConfig;
     private bool _isLoading;
     private bool _isThinking;
@@ -260,6 +267,7 @@
 
             // Settings initialization (requires JS interop, so must be in OnAfterRenderAsync)
             SettingsState.OnSettingsRequested += ShowSettingsFromGear;
+            AgentsPanelState.OnRequested += ShowAgents;
 
             if (Utils.NeedsConfiguration)
             {
@@ -480,6 +488,12 @@
     private void ShowSettingsFromGear()
     {
         _showSettings = true;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void ShowAgents()
+    {
+        _showAgents = true;
         InvokeAsync(StateHasChanged);
     }
 
@@ -863,6 +877,7 @@
     public void Dispose()
     {
         SettingsState.OnSettingsRequested -= ShowSettingsFromGear;
+        AgentsPanelState.OnRequested -= ShowAgents;
         _cancellationTokenSource?.Dispose();
         _dotNetRef?.Dispose();
     }
