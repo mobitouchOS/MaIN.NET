@@ -164,6 +164,12 @@ public static class Utils
     ];
 }
 
+public sealed class TranscriptSegment
+{
+    public bool IsTool { get; set; }
+    public string Text { get; set; } = string.Empty;
+}
+
 public class MessageExt
 {
     public required Message Message { get; set; }
@@ -175,5 +181,5 @@ public class MessageExt
     public List<(string Name, string Base64)> AttachedImages { get; set; } = new();
     public string? AgentName { get; set; }
     public bool ShowActivity { get; set; }
-    public string ToolActivity { get; set; } = string.Empty;
+    public List<TranscriptSegment>? Transcript { get; set; }
 }

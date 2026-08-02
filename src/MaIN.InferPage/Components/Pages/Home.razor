@@ -21,6 +21,7 @@
 @using MaIN.Services
 @using MaIN.Services.Constants
 @using Markdig
+@using System.Text.Json
 @using Message = MaIN.Domain.Entities.Message
 @using MessageType = MaIN.Domain.Entities.MessageType
 <link rel="stylesheet" href="home.css">
@@ -137,7 +138,7 @@
                                     </div>
                                     <hr class="reasoning-hr"/>
                                 }
-                                @if (!string.IsNullOrEmpty(conversation.ToolActivity))
+                                @if (conversation.Transcript is { Count: > 0 })
                                 {
                                     <div class="activity-row">
                                         <span class="activity-toggle" title="@(conversation.ShowActivity ? "Hide activity" : "Show activity")"
@@ -145,16 +146,31 @@
                                             <FluentIcon Value="@(new Icons.Regular.Size24.Wrench())"
                                                         Style="@($"fill: {(conversation.ShowActivity ? "var(--accent-base-color)" : "var(--neutral-foreground-hint)")};")"/>
                                         </span>
-                                        @if (conversation.ShowActivity)
-                                        {
-                                            <div class="agent-activity">
-                                                @((MarkupString)Markdown.ToHtml(conversation.ToolActivity, _markdownPipeline))
-                                            </div>
-                                        }
                                     </div>
                                     <hr class="reasoning-hr"/>
+                                    @if (conversation.ShowActivity)
+                                    {
+                                        @foreach (var segment in conversation.Transcript)
+                                        {
+                                            @if (segment.IsTool)
+                                            {
+                                                <div class="agent-activity">@segment.Text</div>
+                                            }
+                                            else
+                                            {
+                                                <div>@((MarkupString)Markdown.ToHtml(segment.Text, _markdownPipeline))</div>
+                                            }
+                                        }
+                                    }
+                                    else
+                                    {
+                                        @((MarkupString)Markdown.ToHtml(conversation.ComputedContent, _markdownPipeline))
+                                    }
                                 }
-                                @((MarkupString)Markdown.ToHtml(conversation.ComputedContent, _markdownPipeline))
+                                else
+                                {
+                                    @((MarkupString)Markdown.ToHtml(conversation.ComputedContent, _markdownPipeline))
+                                }
                             </div>
                         }
                     }
@@ -167,7 +183,7 @@
             {
                 <span class="message-role-bot" style="font-style: italic; font-size: small">This might take a while...</span>
             }
-            else if (_incomingMessage != null || _incomingReasoning != null || _incomingActivity != null)
+            else if (_incomingMessage != null || _incomingReasoning != null || _incomingTranscript.Count > 0)
             {
                 @if (ActiveAgentState.Current is not null)
                 {
@@ -180,14 +196,22 @@
                             @((MarkupString)Markdown.ToHtml(_incomingReasoning ?? string.Empty, _markdownPipeline))
                         </span>
                     }
+                    else if (_incomingTranscript.Count > 0)
+                    {
+                        @foreach (var segment in _incomingTranscript)
+                        {
+                            @if (segment.IsTool)
+                            {
+                                <div class="agent-activity">@segment.Text</div>
+                            }
+                            else
+                            {
+                                <div>@((MarkupString)Markdown.ToHtml(segment.Text, _markdownPipeline))</div>
+                            }
+                        }
+                    }
                     else
                     {
-                        @if (!string.IsNullOrEmpty(_incomingActivity))
-                        {
-                            <div class="agent-activity">
-                                @((MarkupString)Markdown.ToHtml(_incomingActivity, _markdownPipeline))
-                            </div>
-                        }
                         @((MarkupString)Markdown.ToHtml(_incomingMessage ?? string.Empty, _markdownPipeline))
                     }
                 </FluentCard>
@@ -269,7 +293,7 @@
     private string? _errorMessage;
     private string? _incomingMessage;
     private string? _incomingReasoning;
-    private string? _incomingActivity;
+    private List<TranscriptSegment> _incomingTranscript = new();
     private IChatMessageBuilder? ctx;
     private CancellationTokenSource? _cancellationTokenSource;
     private Chat Chat { get; set; } = new() { Name = "MaIN Infer", ModelId = Utils.Model ?? "unknown" };
@@ -910,6 +934,15 @@
             {
                 if (cancellationToken.IsCancellationRequested || token.Type != TokenType.Message) return;
                 _incomingMessage += token.Text;
+                var lastSegment = _incomingTranscript.LastOrDefault();
+                if (lastSegment is not null && !lastSegment.IsTool)
+                {
+                    lastSegment.Text += token.Text;
+                }
+                else
+                {
+                    _incomingTranscript.Add(new TranscriptSegment { IsTool = false, Text = token.Text });
+                }
                 await InvokeAsync(StateHasChanged);
                 if (wasAtBottom)
                     await InvokeAsync(async () => await JS.InvokeVoidAsync("scrollManager.scrollToBottomSmooth", "messages-container"));
@@ -921,9 +954,7 @@
                 var line = invocation.Done
                     ? $"🔧 finished {invocation.ToolName}"
                     : $"🔧 calling {invocation.ToolName}";
-                _incomingActivity = string.IsNullOrEmpty(_incomingActivity)
-                    ? line
-                    : _incomingActivity + "\n" + line;
+                _incomingTranscript.Add(new TranscriptSegment { IsTool = true, Text = line });
                 await InvokeAsync(StateHasChanged);
             };
 
@@ -940,14 +971,14 @@
                 Time = DateTime.Now
             };
             assistantMsg.Properties["AgentName"] = agent.Name;
-            if (!string.IsNullOrWhiteSpace(_incomingActivity))
-                assistantMsg.Properties["AgentActivity"] = _incomingActivity;
+            if (_incomingTranscript.Count > 0)
+                assistantMsg.Properties["AgentTranscript"] = JsonSerializer.Serialize(_incomingTranscript);
             Chat.Messages.Add(assistantMsg);
 
             await JS.InvokeVoidAsync("scrollManager.saveScrollPosition", "messages-container");
             _preserveScroll = true;
             _incomingMessage = null;
-            _incomingActivity = null;
+            _incomingTranscript = new();
             RebuildMessagesWithFiles();
         }
         catch (OperationCanceledException)
@@ -962,8 +993,8 @@
                     Time = DateTime.Now
                 };
                 partialMsg.Properties["AgentName"] = agent.Name;
-                if (!string.IsNullOrWhiteSpace(_incomingActivity))
-                    partialMsg.Properties["AgentActivity"] = _incomingActivity;
+                if (_incomingTranscript.Count > 0)
+                    partialMsg.Properties["AgentTranscript"] = JsonSerializer.Serialize(_incomingTranscript);
                 Chat.Messages.Add(partialMsg);
                 RebuildMessagesWithFiles();
             }
@@ -976,7 +1007,7 @@
             }
 
             _incomingMessage = null;
-            _incomingActivity = null;
+            _incomingTranscript = new();
             StateHasChanged();
         }
         catch (Exception ex)
@@ -985,7 +1016,7 @@
                 ? maInException.PublicErrorMessage
                 : ex.Message;
             _incomingMessage = null;
-            _incomingActivity = null;
+            _incomingTranscript = new();
             StateHasChanged();
         }
         finally
@@ -1033,6 +1064,20 @@
         conversation.ShowActivity = !conversation.ShowActivity;
     }
 
+    // Defensive: malformed/legacy AgentTranscript JSON must not break rendering of the whole conversation.
+    private static List<TranscriptSegment>? TryDeserializeTranscript(string? json)
+    {
+        if (string.IsNullOrEmpty(json)) return null;
+        try
+        {
+            return JsonSerializer.Deserialize<List<TranscriptSegment>>(json);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
     private void RebuildMessagesWithFiles()
     {
         var existingFilesMap = Messages
@@ -1060,7 +1105,9 @@
             ComputedReasoning = GetReasoningContent(x),
             AgentName = x.Properties.TryGetValue("AgentName", out var n) ? n : null,
             ShowActivity = existingActivityMap.TryGetValue(x, out var showAct) && showAct,
-            ToolActivity = x.Properties.TryGetValue("AgentActivity", out var act) ? act : string.Empty
+            Transcript = x.Properties.TryGetValue("AgentTranscript", out var json)
+                ? TryDeserializeTranscript(json)
+                : null
         }).ToList();
     }
 
