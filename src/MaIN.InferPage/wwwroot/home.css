@@ -461,3 +461,37 @@ body {
     opacity: 1;
     background-color: rgba(0, 0, 0, 0.6);
 }
+
+/* Active-agent bar shown above the main chat */
+.active-agent-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0.5rem 0.75rem 0;
+    padding: 0.35rem 0.75rem;
+    border: 1px solid var(--neutral-stroke-rest);
+    border-radius: 999px;
+    background: var(--neutral-layer-2);
+    width: fit-content;
+    max-width: calc(100% - 1.5rem);
+}
+.active-agent-bar .active-agent-name { font-weight: 600; }
+
+/* Per-message agent attribution badge */
+.agent-badge {
+    display: inline-block;
+    margin-bottom: 0.35rem;
+    padding: 0.1rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    background: var(--neutral-fill-secondary-rest);
+    color: var(--accent-foreground-rest);
+}
+
+/* Transient tool-call activity shown in the in-flight agent reply */
+.agent-activity {
+    font-size: 0.8rem;
+    font-style: italic;
+    opacity: 0.8;
+    margin-bottom: 0.35rem;
+}

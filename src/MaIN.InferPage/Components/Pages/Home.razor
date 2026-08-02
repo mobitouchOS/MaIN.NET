@@ -4,12 +4,15 @@
 @inject SettingsService SettingsStorage
 @inject SettingsStateService SettingsState
 @inject AgentsPanelStateService AgentsPanelState
+@inject AgentRunner AgentRunner
 @inject MaINSettings MaINSettings
 @implements IDisposable
 @using MaIN.Core.Hub
 @using MaIN.Core.Hub.Contexts.Interfaces.ChatContext
 @using MaIN.Domain.Configuration
 @using MaIN.Domain.Entities
+@using MaIN.Domain.Entities.Agents
+@using MaIN.Domain.Entities.Tools
 @using MaIN.Domain.Configuration.BackendInferenceParams
 @using MaIN.Domain.Exceptions
 @using MaIN.Domain.Models
@@ -34,7 +37,7 @@
 
 @if (_showAgents)
 {
-    <AgentsPanel OnClose="@(() => { _showAgents = false; })" />
+    <AgentsPanel OnClose="@(() => { _showAgents = false; })" OnAgentSelected="@HandleAgentSelected" />
 }
 
 <div class="chat-container" id="chat-container">
@@ -49,6 +52,21 @@
     }
 
     <FluentProgress Visible="@(_isLoading)" Style="width: 100%; margin: 0; color: var(--accent-base-color)"/>
+
+    @if (_activeAgent is not null)
+    {
+        <div class="active-agent-bar">
+            <span class="active-agent-name">🤖 @_activeAgent.Name</span>
+            <FluentButton Appearance="Appearance.Lightweight"
+                          OnClick="@(() => AgentsPanelState.Request())">
+                Switch agent
+            </FluentButton>
+            <FluentButton Appearance="Appearance.Lightweight"
+                          OnClick="@(() => { _activeAgent = null; })">
+                Exit
+            </FluentButton>
+        </div>
+    }
 
     <div class="messages-container" id="messages-container">
         @foreach (var conversation in Messages)
@@ -111,6 +129,10 @@
                         else
                         {
                             <div>
+                                @if (!string.IsNullOrEmpty(conversation.AgentName))
+                                {
+                                    <span class="agent-badge">🤖 @conversation.AgentName</span>
+                                }
                                 @if (conversation.HasReasoning)
                                 {
                                     <div class="reasoning-row">
@@ -142,7 +164,7 @@
             {
                 <span class="message-role-bot" style="font-style: italic; font-size: small">This might take a while...</span>
             }
-            else if (_incomingMessage != null || _incomingReasoning != null)
+            else if (_incomingMessage != null || _incomingReasoning != null || _incomingActivity != null)
             {
                 <FluentCard class="message-card bot-message">
                     @if (_isThinking)
@@ -153,6 +175,10 @@
                     }
                     else
                     {
+                        @if (!string.IsNullOrEmpty(_incomingActivity))
+                        {
+                            <div class="agent-activity">@_incomingActivity</div>
+                        }
                         @((MarkupString)Markdown.ToHtml(_incomingMessage ?? string.Empty, _markdownPipeline))
                     }
                 </FluentCard>
@@ -234,6 +260,8 @@
     private string? _errorMessage;
     private string? _incomingMessage;
     private string? _incomingReasoning;
+    private string? _incomingActivity;
+    private Agent? _activeAgent;
     private IChatMessageBuilder? ctx;
     private CancellationTokenSource? _cancellationTokenSource;
     private Chat Chat { get; set; } = new() { Name = "MaIN Infer", ModelId = Utils.Model ?? "unknown" };
@@ -497,6 +525,13 @@
         InvokeAsync(StateHasChanged);
     }
 
+    private void HandleAgentSelected(Agent agent)
+    {
+        _activeAgent = agent;
+        _showAgents = false;
+        StateHasChanged();
+    }
+
     private void HandleSettingsApplied()
     {
         _hasExistingConfig = true;
@@ -646,6 +681,12 @@
     {
         if (string.IsNullOrWhiteSpace(msg) && !_selectedFiles.Any() && !_selectedImages.Any())
         {
+            return;
+        }
+
+        if (_activeAgent is not null)
+        {
+            await SendToAgentAsync(msg);
             return;
         }
 
@@ -807,6 +848,139 @@
         }
     }
 
+    // Mirrors SendAsync's streaming/loading/cancellation plumbing, but routes the turn through the
+    // selected agent (via the stateless AgentRunner) instead of the chat completion context.
+    private async Task SendToAgentAsync(string msg)
+    {
+        if (_activeAgent is null || string.IsNullOrWhiteSpace(msg)) return;
+
+        _cancellationTokenSource?.Dispose();
+        _cancellationTokenSource = new CancellationTokenSource();
+        var cancellationToken = _cancellationTokenSource.Token;
+
+        _isLoading = true;
+        StateHasChanged();
+
+        // Agents don't take file attachments in this flow — drop any pending selection.
+        foreach (var f in _selectedFiles) f.StreamContent?.Dispose();
+        foreach (var i in _selectedImages) i.File.StreamContent?.Dispose();
+        _selectedFiles.Clear();
+        _selectedImages.Clear();
+        _inputKey++;
+
+        var agent = _activeAgent!;
+
+        try
+        {
+            var newMsg = new Message
+            {
+                Role = "User",
+                Content = msg,
+                Type = GetMessageType()
+            };
+            Chat.Messages.Add(newMsg);
+            Messages.Add(new MessageExt { Message = newMsg });
+
+            bool wasAtBottom = await JS.InvokeAsync<bool>("scrollManager.isAtBottom", "messages-container");
+            StateHasChanged();
+            if (wasAtBottom)
+                await JS.InvokeVoidAsync("scrollManager.scrollToBottomSmooth", "messages-container");
+
+            // Stateless runner — hand it the full user/assistant conversation each call (agent supplies its own system).
+            var history = Chat.Messages
+                .Where(m => m.Role == "User" || m.Role == "Assistant")
+                .Select(m => new Message
+                {
+                    Role = m.Role,
+                    Content = m.Content,
+                    Type = m.Type,
+                    Time = m.Time
+                })
+                .ToList();
+
+            Func<LLMTokenValue, Task> onToken = async token =>
+            {
+                if (cancellationToken.IsCancellationRequested || token.Type != TokenType.Message) return;
+                _incomingMessage += token.Text;
+                await InvokeAsync(StateHasChanged);
+                if (wasAtBottom)
+                    await InvokeAsync(async () => await JS.InvokeVoidAsync("scrollManager.scrollToBottomSmooth", "messages-container"));
+            };
+
+            Func<ToolInvocation, Task> onTool = async invocation =>
+            {
+                if (cancellationToken.IsCancellationRequested) return;
+                _incomingActivity = invocation.Done
+                    ? $"🔧 finished {invocation.ToolName}"
+                    : $"🔧 calling {invocation.ToolName}";
+                await InvokeAsync(StateHasChanged);
+            };
+
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var result = await AgentRunner.RunAsync(agent.Id, history, onToken, onTool, cancellationToken);
+
+            var content = !string.IsNullOrEmpty(_incomingMessage) ? _incomingMessage! : result.Content;
+            var assistantMsg = new Message
+            {
+                Role = "Assistant",
+                Content = content,
+                Type = GetMessageType(),
+                Time = DateTime.Now
+            };
+            assistantMsg.Properties["AgentName"] = agent.Name;
+            Chat.Messages.Add(assistantMsg);
+
+            await JS.InvokeVoidAsync("scrollManager.saveScrollPosition", "messages-container");
+            _preserveScroll = true;
+            _incomingMessage = null;
+            _incomingActivity = null;
+            RebuildMessagesWithFiles();
+        }
+        catch (OperationCanceledException)
+        {
+            if (!string.IsNullOrWhiteSpace(_incomingMessage))
+            {
+                var partialMsg = new Message
+                {
+                    Role = "Assistant",
+                    Content = _incomingMessage,
+                    Type = GetMessageType(),
+                    Time = DateTime.Now
+                };
+                partialMsg.Properties["AgentName"] = agent.Name;
+                Chat.Messages.Add(partialMsg);
+                RebuildMessagesWithFiles();
+            }
+            else
+            {
+                if (Chat.Messages.Count > 0 && Chat.Messages.Last().Role == "User")
+                    Chat.Messages.RemoveAt(Chat.Messages.Count - 1);
+                if (Messages.Count > 0 && Messages.Last().Message.Role == "User")
+                    Messages.RemoveAt(Messages.Count - 1);
+            }
+
+            _incomingMessage = null;
+            _incomingActivity = null;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = ex is MaINCustomException maInException
+                ? maInException.PublicErrorMessage
+                : ex.Message;
+            _incomingMessage = null;
+            _incomingActivity = null;
+            StateHasChanged();
+        }
+        finally
+        {
+            _isLoading = false;
+            _isThinking = false;
+            StateHasChanged();
+        }
+    }
+
     private void HandleInput(ChangeEventArgs obj)
     {
         // Handled by JS on send to ensure accuracy
@@ -858,7 +1032,8 @@
             ShowReason = existingReasonMap.TryGetValue(x, out var show) && show,
             HasReasoning = x.Tokens.Any(t => t.Type == TokenType.Reason),
             ComputedContent = GetMessageContent(x),
-            ComputedReasoning = GetReasoningContent(x)
+            ComputedReasoning = GetReasoningContent(x),
+            AgentName = x.Properties.TryGetValue("AgentName", out var n) ? n : null
         }).ToList();
     }
 

@@ -1,14 +1,7 @@
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @using MaIN.Domain.Entities.Agents
-@using MaIN.Domain.Entities.Tools
-@using MaIN.Domain.Models
-@using ChatMessage = MaIN.Domain.Entities.Message
-@using MessageType = MaIN.Domain.Entities.MessageType
 @using MaIN.InferPage.Services
 @inject AgentDefinitionService AgentService
-@inject AgentRunner AgentRunner
-@inject IJSRuntime JS
-@implements IDisposable
 
 <link rel="stylesheet" href="agents.css">
 
@@ -24,57 +17,6 @@
         </div>
 
         <div class="settings-body">
-            @if (_chatAgent is not null)
-            {
-                <div class="chat-view">
-                    <div class="chat-view-header">
-                        <FluentButton Appearance="Appearance.Lightweight"
-                                      OnClick="CloseChat"
-                                      Disabled="_chatBusy"
-                                      IconStart="@(new Icons.Regular.Size20.ArrowLeft())">
-                            Back
-                        </FluentButton>
-                        <div class="chat-agent-title">
-                            <strong>@_chatAgent.Name</strong>
-                            <span class="muted">@_chatAgent.Model</span>
-                        </div>
-                    </div>
-
-                    <div class="chat-log" id="agent-chat-log">
-                        @if (_log.Count == 0)
-                        {
-                            <p class="muted">Say something to start the conversation.</p>
-                        }
-                        @foreach (var entry in _log)
-                        {
-                            <div class="chat-line chat-@entry.Kind.ToString().ToLowerInvariant()">
-                                @switch (entry.Kind)
-                                {
-                                    case EntryKind.Tool:
-                                        <span>🔧 @entry.Text</span>
-                                        break;
-                                    default:
-                                        @entry.Text
-                                        break;
-                                }
-                            </div>
-                        }
-                    </div>
-
-                    <div class="chat-input">
-                        <FluentTextField @bind-Value="_chatInput"
-                                         Placeholder="Type a message..."
-                                         Style="flex: 1;"
-                                         Disabled="_chatBusy"
-                                         @onkeydown="OnChatKeyDown" />
-                        <FluentButton Appearance="Appearance.Accent" OnClick="SendChat" Disabled="_chatBusy">
-                            @(_chatBusy ? "..." : "Send")
-                        </FluentButton>
-                    </div>
-                </div>
-            }
-            else
-            {
             <div class="agents-layout">
                 <section class="agents-list">
                     <h3>Saved agents</h3>
@@ -94,7 +36,8 @@
                                 </div>
                                 <div class="agent-card-actions">
                                     <FluentButton Appearance="Appearance.Lightweight"
-                                                  OnClick="@(() => OpenChat(agent))"
+                                                  Title="Use this agent"
+                                                  OnClick="@(() => OnAgentSelected.InvokeAsync(agent))"
                                                   IconStart="@(new Icons.Regular.Size20.Chat())">
                                     </FluentButton>
                                     <FluentButton Appearance="Appearance.Lightweight"
@@ -132,13 +75,13 @@
                     </FluentButton>
                 </section>
             </div>
-            }
         </div>
     </div>
 </div>
 
 @code {
     [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback<Agent> OnAgentSelected { get; set; }
 
     private List<Agent> _agents = [];
     private string _name = string.Empty;
@@ -148,14 +91,6 @@
         BuiltInToolCatalog.All.Select(t => new ToolChoice(t.Name, t.DisplayName, t.Description)).ToList();
     private string _error = string.Empty;
     private bool _busy;
-
-    private Agent? _chatAgent;
-    private List<ChatEntry> _log = new();
-    private string _chatInput = string.Empty;
-    private bool _chatBusy;
-    // Bumped whenever a chat session ends (open/close/dispose); stale streaming callbacks compare
-    // against their captured value and no-op, so they can never touch a reassigned _log.
-    private int _chatGeneration;
 
     protected override async Task OnInitializedAsync() => await ReloadAgents();
 
@@ -214,133 +149,6 @@
         await ReloadAgents();
     }
 
-    private void OpenChat(Agent agent)
-    {
-        _chatGeneration++;
-        _chatAgent = agent;
-        _log = new();
-        _chatInput = string.Empty;
-        _chatBusy = false;
-    }
-
-    private void CloseChat()
-    {
-        _chatGeneration++;
-        _chatAgent = null;
-        _log = new();
-        _chatInput = string.Empty;
-        _chatBusy = false;
-    }
-
-    public void Dispose() => _chatGeneration++;
-
-    private async Task OnChatKeyDown(KeyboardEventArgs e)
-    {
-        if (e is { Key: "Enter", ShiftKey: false } && !_chatBusy)
-        {
-            await SendChat();
-        }
-    }
-
-    private async Task SendChat()
-    {
-        if (_chatAgent is null || _chatBusy) return;
-        var text = _chatInput?.Trim();
-        if (string.IsNullOrEmpty(text)) return;
-
-        // Capture the session generation up front; callbacks from an abandoned turn compare against it.
-        var gen = _chatGeneration;
-
-        _chatInput = string.Empty;
-        _chatBusy = true;
-
-        _log.Add(new ChatEntry(EntryKind.User, text));
-
-        // Build the full conversation (user + assistant turns only) for the stateless runner.
-        var messages = _log
-            .Where(x => x.Kind is EntryKind.User or EntryKind.Assistant)
-            .Select(x => new ChatMessage
-            {
-                Role = x.Kind == EntryKind.User ? "User" : "Assistant",
-                Content = x.Text,
-                Type = MessageType.NotSet,
-                Time = DateTime.Now
-            })
-            .ToList();
-
-        // Placeholder assistant entry that fills in as tokens stream.
-        var assistant = new ChatEntry(EntryKind.Assistant, string.Empty);
-        _log.Add(assistant);
-        await InvokeAsync(StateHasChanged);
-
-        // Callbacks fire from the agent's processing context. Mutations run inside InvokeAsync so the
-        // renderer's dispatcher serializes them, and the generation guard makes stale callbacks no-ops.
-        Func<LLMTokenValue, Task> onToken = async token =>
-        {
-            if (token.Type != TokenType.Message) return;
-            await InvokeAsync(() =>
-            {
-                if (gen != _chatGeneration) return;
-                assistant.Text += token.Text;
-                StateHasChanged();
-            });
-        };
-
-        Func<ToolInvocation, Task> onTool = async invocation =>
-        {
-            var label = invocation.Done ? $"finished {invocation.ToolName}" : $"calling {invocation.ToolName}";
-            await InvokeAsync(() =>
-            {
-                if (gen != _chatGeneration) return;
-                var index = _log.IndexOf(assistant);
-                if (index < 0) return; // stale/removed — do nothing
-                _log.Insert(index, new ChatEntry(EntryKind.Tool, label));
-                StateHasChanged();
-            });
-        };
-
-        try
-        {
-            var result = await AgentRunner.RunAsync(_chatAgent.Id, messages, onToken, onTool);
-            await InvokeAsync(() =>
-            {
-                if (gen != _chatGeneration) return;
-                if (string.IsNullOrEmpty(assistant.Text))
-                {
-                    assistant.Text = result.Content;
-                }
-                StateHasChanged();
-            });
-        }
-        catch (Exception ex)
-        {
-            await InvokeAsync(() =>
-            {
-                if (gen != _chatGeneration) return;
-                _log.Add(new ChatEntry(EntryKind.Error, ex.Message));
-                StateHasChanged();
-            });
-        }
-        finally
-        {
-            await InvokeAsync(() =>
-            {
-                if (gen != _chatGeneration) return;
-                _chatBusy = false;
-                StateHasChanged();
-            });
-        }
-    }
-
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (_chatAgent is not null && _log.Count > 0)
-        {
-            // Mirror Home.razor's scroll approach (scrollManager keyed by element id).
-            await JS.InvokeVoidAsync("scrollManager.scrollToBottomSmooth", "agent-chat-log");
-        }
-    }
-
     // FluentCheckbox @bind-Value needs a settable property expression; a dictionary indexer throws at runtime.
     private sealed class ToolChoice(string name, string displayName, string description)
     {
@@ -348,13 +156,5 @@
         public string DisplayName { get; } = displayName;
         public string Description { get; } = description;
         public bool Selected { get; set; }
-    }
-
-    private enum EntryKind { User, Assistant, Tool, Error }
-
-    private sealed class ChatEntry(AgentsPanel.EntryKind kind, string text)
-    {
-        public EntryKind Kind { get; } = kind;
-        public string Text { get; set; } = text;
     }
 }

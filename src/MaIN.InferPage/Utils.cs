@@ -166,4 +166,5 @@ public class MessageExt
     public string ComputedReasoning { get; set; } = string.Empty;
     public List<string> AttachedFiles { get; set; } = new();
     public List<(string Name, string Base64)> AttachedImages { get; set; } = new();
+    public string? AgentName { get; set; }
 }
