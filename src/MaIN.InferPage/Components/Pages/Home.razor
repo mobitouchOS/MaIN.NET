@@ -60,9 +60,22 @@
         {
             @if (conversation.Message.Role != "System")
             {
-                @if (conversation.Message.Role != "User" && !string.IsNullOrEmpty(conversation.AgentName))
+                @if (conversation.Message.Role != "User" && (!string.IsNullOrEmpty(conversation.AgentName) || conversation.Transcript is { Count: > 0 }))
                 {
-                    <span class="agent-badge">🤖 @conversation.AgentName</span>
+                    <div class="agent-meta-row">
+                        @if (!string.IsNullOrEmpty(conversation.AgentName))
+                        {
+                            <span class="agent-badge">🤖 @conversation.AgentName</span>
+                        }
+                        @if (conversation.Transcript is { Count: > 0 })
+                        {
+                            <span class="activity-toggle" title="@(conversation.ShowActivity ? "Hide activity" : "Show activity")"
+                                  @onclick="@(() => ToggleActivity(conversation))">
+                                <FluentIcon Value="@(new Icons.Regular.Size20.Wrench())"
+                                            Style="@($"fill: {(conversation.ShowActivity ? "var(--accent-base-color)" : "var(--neutral-foreground-hint)")};")"/>
+                            </span>
+                        }
+                    </div>
                 }
                 <FluentCard class="@(conversation.Message.Role == "User" ? "message-card user-message" : "message-card bot-message")">
                     @if (conversation.Message.Role == "User")
@@ -140,14 +153,6 @@
                                 }
                                 @if (conversation.Transcript is { Count: > 0 })
                                 {
-                                    <div class="activity-row">
-                                        <span class="activity-toggle" title="@(conversation.ShowActivity ? "Hide activity" : "Show activity")"
-                                              @onclick="@(() => ToggleActivity(conversation))">
-                                            <FluentIcon Value="@(new Icons.Regular.Size24.Wrench())"
-                                                        Style="@($"fill: {(conversation.ShowActivity ? "var(--accent-base-color)" : "var(--neutral-foreground-hint)")};")"/>
-                                        </span>
-                                    </div>
-                                    <hr class="reasoning-hr"/>
                                     @if (conversation.ShowActivity)
                                     {
                                         @foreach (var segment in conversation.Transcript)

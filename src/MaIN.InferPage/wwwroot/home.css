@@ -462,11 +462,17 @@ body {
     background-color: rgba(0, 0, 0, 0.6);
 }
 
-/* Per-message agent attribution badge — sits just above the assistant bubble */
-.agent-badge {
+/* Per-message agent attribution row — badge + tool-activity toggle, sits just above the assistant bubble */
+.agent-meta-row {
     align-self: flex-start;
-    display: inline-block;
+    display: flex;
+    align-items: center;
+    gap: 6px;
     margin: 0 0 0.35rem 2px;
+}
+
+.agent-badge {
+    display: inline-block;
     padding: 0.1rem 0.5rem;
     border-radius: 999px;
     font-size: 0.75rem;
@@ -474,20 +480,10 @@ body {
     color: var(--accent-foreground-rest);
 }
 
-/* Collapsible tool-call activity row (mirrors the reasoning row) */
-.activity-row {
-    display: flex;
-    flex-direction: row;
-    align-items: flex-start;
-    gap: 8px;
-    margin-bottom: 6px;
-}
-
 .activity-toggle {
     display: inline-flex;
     align-items: center;
     flex-shrink: 0;
-    margin-top: 10px;
     cursor: pointer;
     opacity: 0.85;
 }
