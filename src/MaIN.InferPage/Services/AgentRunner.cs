@@ -1,8 +1,11 @@
+using MaIN.Domain.Configuration.BackendInferenceParams;
 using MaIN.Domain.Entities;
 using MaIN.Domain.Entities.Tools;
 using MaIN.Domain.Models;
+using MaIN.Domain.Models.Abstract;
 using MaIN.Services.Constants;
 using MaIN.Services.Services.Abstract;
+using Utils = MaIN.InferPage.Utils;
 
 namespace MaIN.InferPage.Services;
 
@@ -32,6 +35,10 @@ public sealed class AgentRunner(IAgentService agentService, IHttpClientFactory h
         chat.Messages.Clear();
         if (system is not null) chat.Messages.Add(system);
         chat.Messages.AddRange(messages);
+
+        // The service is selected by the model's backend, so build matching params; the persisted chat may carry stale/wrong-typed params.
+        var backend = ModelRegistry.TryGetById(chat.ModelId, out var model) ? model!.Backend : Utils.BackendType;
+        chat.BackendParams = BackendParamsFactory.Create(backend);
 
         var resultChat = await agentService.Process(chat, agentId, knowledge: null, translatePrompt: false,
             callbackToken: tokenCallback, callbackTool: toolCallback);
