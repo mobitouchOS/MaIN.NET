@@ -16,6 +16,13 @@ public static class Utils
 
     public static bool NeedsConfiguration { get; set; }
 
+    /// <summary>
+    /// SECURITY: an MCP server's Command is executed verbatim as an OS process on this machine with no
+    /// sandboxing, so the agent configurator hides MCP entirely unless the host operator opts in by setting
+    /// MaIN:AllowMcpConfiguration. Must stay false by default.
+    /// </summary>
+    public static bool AllowMcpConfiguration { get; set; }
+
     public static string DefaultModelsPath => System.IO.Path.Combine(Directory.GetCurrentDirectory(), "models");
 
     /// <summary>

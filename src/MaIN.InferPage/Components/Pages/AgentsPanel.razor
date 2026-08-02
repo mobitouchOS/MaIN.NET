@@ -1,5 +1,7 @@
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
+@using MaIN.Domain.Configuration
 @using MaIN.Domain.Entities.Agents
+@using MaIN.Domain.Models.Abstract
 @using MaIN.InferPage.Services
 @inject AgentDefinitionService AgentService
 @inject ActiveAgentState ActiveAgent
@@ -33,6 +35,10 @@
                             <div class="agent-card @(isActive ? "active" : "")">
                                 <div class="agent-card-main">
                                     <strong>@agent.Name</strong>
+                                    @if (agent.Config?.McpConfig is not null)
+                                    {
+                                        <span class="mcp-badge" title="This agent runs an MCP server">MCP</span>
+                                    }
                                     <span class="muted">@agent.Model</span>
                                     <code class="agent-ref">agent:@agent.Id</code>
                                 </div>
@@ -81,6 +87,31 @@
                             </FluentCheckbox>
                         }
                     </div>
+                    @* SECURITY: rendered only when the host operator opted in via MaIN:AllowMcpConfiguration. *@
+                    @if (Utils.AllowMcpConfiguration)
+                    {
+                        <label>MCP server</label>
+                        <FluentCheckbox @bind-Value="_mcpEnabled">Enable MCP for this agent</FluentCheckbox>
+                        @if (_mcpEnabled)
+                        {
+                            <div class="mcp-warning">
+                                ⚠ MCP servers run an arbitrary command on this machine with no sandboxing.
+                                Only configure MCP servers from sources you fully trust.
+                            </div>
+                            @if (McpUnsupportedBackend())
+                            {
+                                <p class="mcp-note">MCP is not supported on Self/DeepSeek/Ollama backends — this agent's MCP config would fail at runtime.</p>
+                            }
+                            <label>MCP name</label>
+                            <FluentTextField @bind-Value="_mcpName" Placeholder="e.g., filesystem" Style="width: 100%;" />
+                            <label>Command</label>
+                            <FluentTextField @bind-Value="_mcpCommand" Placeholder="npx" Style="width: 100%;" />
+                            <label>Arguments (one per line)</label>
+                            <FluentTextArea @bind-Value="_mcpArguments" Rows="3" Placeholder="one argument per line" Style="width: 100%;" />
+                            <label>Environment variables (one KEY=VALUE per line)</label>
+                            <FluentTextArea @bind-Value="_mcpEnvironment" Rows="3" Placeholder="API_TOKEN=abc123" Style="width: 100%;" />
+                        }
+                    }
                     @if (!string.IsNullOrEmpty(_error))
                     {
                         <p class="error">@_error</p>
@@ -116,6 +147,12 @@
     private bool _busy;
     private string? _editingId;
 
+    private bool _mcpEnabled;
+    private string _mcpName = string.Empty;
+    private string _mcpCommand = string.Empty;
+    private string _mcpArguments = string.Empty;
+    private string _mcpEnvironment = string.Empty;
+
     protected override async Task OnInitializedAsync() => await ReloadAgents();
 
     private async Task ReloadAgents()
@@ -143,7 +180,7 @@
         try
         {
             var toolNames = _toolChoices.Where(t => t.Selected).Select(t => t.Name).ToList();
-            var request = new CreateAgentRequest(_name.Trim(), _modelId.Trim(), _systemPrompt, toolNames);
+            var request = new CreateAgentRequest(_name.Trim(), _modelId.Trim(), _systemPrompt, toolNames, BuildMcpRequest());
             var editingId = _editingId;
 
             var savedAgent = editingId is null
@@ -168,6 +205,44 @@
         }
     }
 
+    // SECURITY: never build an MCP config unless the host opted in AND the user turned the toggle on.
+    private McpServerRequest? BuildMcpRequest()
+    {
+        if (!Utils.AllowMcpConfiguration || !_mcpEnabled || string.IsNullOrWhiteSpace(_mcpCommand))
+        {
+            return null;
+        }
+
+        var arguments = SplitLines(_mcpArguments).ToList();
+
+        var environment = new Dictionary<string, string>();
+        foreach (var line in SplitLines(_mcpEnvironment))
+        {
+            var separator = line.IndexOf('=');
+            if (separator <= 0)
+            {
+                continue;
+            }
+
+            var key = line[..separator].Trim();
+            if (key.Length > 0)
+            {
+                environment[key] = line[(separator + 1)..].Trim();
+            }
+        }
+
+        var name = string.IsNullOrWhiteSpace(_mcpName) ? _name.Trim() : _mcpName.Trim();
+        return new McpServerRequest(name, _mcpCommand.Trim(), arguments, environment);
+    }
+
+    private static IEnumerable<string> SplitLines(string value) =>
+        value.Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0);
+
+    private bool McpUnsupportedBackend() =>
+        !string.IsNullOrWhiteSpace(_modelId)
+        && ModelRegistry.TryGetById(_modelId.Trim(), out var model)
+        && model?.Backend is BackendType.Self or BackendType.DeepSeek or BackendType.Ollama;
+
     private void StartEdit(Agent agent)
     {
         _editingId = agent.Id;
@@ -182,6 +257,16 @@
         {
             t.Selected = selectedNames.Contains(t.Name);
         }
+
+        var mcp = agent.Config?.McpConfig;
+        _mcpEnabled = mcp is not null;
+        _mcpName = mcp?.Name ?? string.Empty;
+        _mcpCommand = mcp?.Command ?? string.Empty;
+        _mcpArguments = mcp is null ? string.Empty : string.Join('\n', mcp.Arguments);
+        _mcpEnvironment = mcp is null
+            ? string.Empty
+            : string.Join('\n', mcp.EnvironmentVariables.Select(kv => $"{kv.Key}={kv.Value}"));
+
         _error = string.Empty;
     }
 
@@ -194,6 +279,11 @@
         _modelId = string.Empty;
         _systemPrompt = "You are a helpful assistant.";
         foreach (var t in _toolChoices) t.Selected = false;
+        _mcpEnabled = false;
+        _mcpName = string.Empty;
+        _mcpCommand = string.Empty;
+        _mcpArguments = string.Empty;
+        _mcpEnvironment = string.Empty;
     }
 
     private void ExitActiveAgent()

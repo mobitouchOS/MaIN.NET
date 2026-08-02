@@ -64,6 +64,10 @@ if (!builder.Environment.IsDevelopment())
         .PersistKeysToFileSystem(new DirectoryInfo("/app/DataProtection-Keys"));
 }
 
+// SECURITY: MCP servers run an arbitrary command on this machine with no sandboxing, so the agent
+// configurator never shows MCP unless the host operator explicitly opts in. Absent key => false.
+Utils.AllowMcpConfiguration = builder.Configuration.GetValue<bool>("MaIN:AllowMcpConfiguration");
+
 try
 {
     var modelArg = builder.Configuration["model"];

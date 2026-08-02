@@ -55,6 +55,31 @@
 .muted { opacity: 0.6; }
 .error { color: var(--error-foreground-rest); }
 
+/* SECURITY warning for the MCP section — must stay visually loud. */
+.mcp-warning {
+    border: 1px solid #d13438;
+    border-left-width: 4px;
+    border-radius: 6px;
+    background: rgba(209, 52, 56, 0.12);
+    color: #d13438;
+    font-weight: 600;
+    padding: 0.6rem 0.75rem;
+    line-height: 1.35;
+}
+.mcp-note { color: var(--error-foreground-rest); font-size: 0.8rem; margin: 0; }
+
+/* Badge marking an agent card as running an MCP server (arbitrary process execution). */
+.mcp-badge {
+    display: inline-block;
+    padding: 0.05rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    background: rgba(209, 52, 56, 0.15);
+    color: #d13438;
+}
+
 .agent-card-actions { display: flex; gap: 0.25rem; }
 
 @media (max-width: 800px) {
