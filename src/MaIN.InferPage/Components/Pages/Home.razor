@@ -937,7 +937,18 @@
 
             Func<LLMTokenValue, Task> onToken = async token =>
             {
-                if (cancellationToken.IsCancellationRequested || token.Type != TokenType.Message) return;
+                if (cancellationToken.IsCancellationRequested) return;
+
+                if (token.Type == TokenType.Reason)
+                {
+                    _isThinking = true;
+                    _incomingReasoning += token.Text;
+                    await InvokeAsync(StateHasChanged);
+                    return;
+                }
+
+                if (token.Type != TokenType.Message) return;
+                _isThinking = false;
                 _incomingMessage += token.Text;
                 var lastSegment = _incomingTranscript.LastOrDefault();
                 if (lastSegment is not null && !lastSegment.IsTool)
@@ -978,11 +989,14 @@
             assistantMsg.Properties["AgentName"] = agent.Name;
             if (_incomingTranscript.Count > 0)
                 assistantMsg.Properties["AgentTranscript"] = JsonSerializer.Serialize(_incomingTranscript);
+            if (!string.IsNullOrWhiteSpace(_incomingReasoning))
+                assistantMsg.Tokens.Add(new LLMTokenValue { Text = _incomingReasoning, Type = TokenType.Reason });
             Chat.Messages.Add(assistantMsg);
 
             await JS.InvokeVoidAsync("scrollManager.saveScrollPosition", "messages-container");
             _preserveScroll = true;
             _incomingMessage = null;
+            _incomingReasoning = null;
             _incomingTranscript = new();
             RebuildMessagesWithFiles();
         }
@@ -1000,6 +1014,8 @@
                 partialMsg.Properties["AgentName"] = agent.Name;
                 if (_incomingTranscript.Count > 0)
                     partialMsg.Properties["AgentTranscript"] = JsonSerializer.Serialize(_incomingTranscript);
+                if (!string.IsNullOrWhiteSpace(_incomingReasoning))
+                    partialMsg.Tokens.Add(new LLMTokenValue { Text = _incomingReasoning, Type = TokenType.Reason });
                 Chat.Messages.Add(partialMsg);
                 RebuildMessagesWithFiles();
             }
@@ -1012,6 +1028,7 @@
             }
 
             _incomingMessage = null;
+            _incomingReasoning = null;
             _incomingTranscript = new();
             StateHasChanged();
         }
@@ -1021,6 +1038,7 @@
                 ? maInException.PublicErrorMessage
                 : ex.Message;
             _incomingMessage = null;
+            _incomingReasoning = null;
             _incomingTranscript = new();
             StateHasChanged();
         }
