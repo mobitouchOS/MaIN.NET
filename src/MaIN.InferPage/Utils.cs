@@ -167,4 +167,6 @@ public class MessageExt
     public List<string> AttachedFiles { get; set; } = new();
     public List<(string Name, string Base64)> AttachedImages { get; set; } = new();
     public string? AgentName { get; set; }
+    public bool ShowActivity { get; set; }
+    public string ToolActivity { get; set; } = string.Empty;
 }

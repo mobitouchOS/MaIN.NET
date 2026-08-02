@@ -4,6 +4,7 @@
 @inject SettingsService SettingsStorage
 @inject SettingsStateService SettingsState
 @inject AgentsPanelStateService AgentsPanelState
+@inject ActiveAgentState ActiveAgentState
 @inject AgentRunner AgentRunner
 @inject MaINSettings MaINSettings
 @implements IDisposable
@@ -53,26 +54,15 @@
 
     <FluentProgress Visible="@(_isLoading)" Style="width: 100%; margin: 0; color: var(--accent-base-color)"/>
 
-    @if (_activeAgent is not null)
-    {
-        <div class="active-agent-bar">
-            <span class="active-agent-name">🤖 @_activeAgent.Name</span>
-            <FluentButton Appearance="Appearance.Lightweight"
-                          OnClick="@(() => AgentsPanelState.Request())">
-                Switch agent
-            </FluentButton>
-            <FluentButton Appearance="Appearance.Lightweight"
-                          OnClick="@(() => { _activeAgent = null; })">
-                Exit
-            </FluentButton>
-        </div>
-    }
-
     <div class="messages-container" id="messages-container">
         @foreach (var conversation in Messages)
         {
             @if (conversation.Message.Role != "System")
             {
+                @if (conversation.Message.Role != "User" && !string.IsNullOrEmpty(conversation.AgentName))
+                {
+                    <span class="agent-badge">🤖 @conversation.AgentName</span>
+                }
                 <FluentCard class="@(conversation.Message.Role == "User" ? "message-card user-message" : "message-card bot-message")">
                     @if (conversation.Message.Role == "User")
                     {
@@ -129,10 +119,6 @@
                         else
                         {
                             <div>
-                                @if (!string.IsNullOrEmpty(conversation.AgentName))
-                                {
-                                    <span class="agent-badge">🤖 @conversation.AgentName</span>
-                                }
                                 @if (conversation.HasReasoning)
                                 {
                                     <div class="reasoning-row">
@@ -146,6 +132,23 @@
                                             <div class="thinker reasoning-text"
                                                  style="border-radius: 10px; padding: 10px; border-width: 2px; background-color: var(--neutral-fill-hover)">
                                                 @((MarkupString)Markdown.ToHtml(conversation.ComputedReasoning, _markdownPipeline))
+                                            </div>
+                                        }
+                                    </div>
+                                    <hr class="reasoning-hr"/>
+                                }
+                                @if (!string.IsNullOrEmpty(conversation.ToolActivity))
+                                {
+                                    <div class="activity-row">
+                                        <span class="activity-toggle" title="@(conversation.ShowActivity ? "Hide activity" : "Show activity")"
+                                              @onclick="@(() => ToggleActivity(conversation))">
+                                            <FluentIcon Value="@(new Icons.Regular.Size24.Wrench())"
+                                                        Style="@($"fill: {(conversation.ShowActivity ? "var(--accent-base-color)" : "var(--neutral-foreground-hint)")};")"/>
+                                        </span>
+                                        @if (conversation.ShowActivity)
+                                        {
+                                            <div class="agent-activity">
+                                                @((MarkupString)Markdown.ToHtml(conversation.ToolActivity, _markdownPipeline))
                                             </div>
                                         }
                                     </div>
@@ -166,6 +169,10 @@
             }
             else if (_incomingMessage != null || _incomingReasoning != null || _incomingActivity != null)
             {
+                @if (ActiveAgentState.Current is not null)
+                {
+                    <span class="agent-badge">🤖 @ActiveAgentState.Current.Name</span>
+                }
                 <FluentCard class="message-card bot-message">
                     @if (_isThinking)
                     {
@@ -177,7 +184,9 @@
                     {
                         @if (!string.IsNullOrEmpty(_incomingActivity))
                         {
-                            <div class="agent-activity">@_incomingActivity</div>
+                            <div class="agent-activity">
+                                @((MarkupString)Markdown.ToHtml(_incomingActivity, _markdownPipeline))
+                            </div>
                         }
                         @((MarkupString)Markdown.ToHtml(_incomingMessage ?? string.Empty, _markdownPipeline))
                     }
@@ -261,7 +270,6 @@
     private string? _incomingMessage;
     private string? _incomingReasoning;
     private string? _incomingActivity;
-    private Agent? _activeAgent;
     private IChatMessageBuilder? ctx;
     private CancellationTokenSource? _cancellationTokenSource;
     private Chat Chat { get; set; } = new() { Name = "MaIN Infer", ModelId = Utils.Model ?? "unknown" };
@@ -527,7 +535,7 @@
 
     private void HandleAgentSelected(Agent agent)
     {
-        _activeAgent = agent;
+        ActiveAgentState.Set(agent);
         _showAgents = false;
         StateHasChanged();
     }
@@ -684,7 +692,7 @@
             return;
         }
 
-        if (_activeAgent is not null)
+        if (ActiveAgentState.Current is not null)
         {
             await SendToAgentAsync(msg);
             return;
@@ -852,7 +860,9 @@
     // selected agent (via the stateless AgentRunner) instead of the chat completion context.
     private async Task SendToAgentAsync(string msg)
     {
-        if (_activeAgent is null || string.IsNullOrWhiteSpace(msg)) return;
+        // Capture the active agent before any await so a mid-turn switch/exit can't race this send.
+        var agent = ActiveAgentState.Current;
+        if (agent is null || string.IsNullOrWhiteSpace(msg)) return;
 
         _cancellationTokenSource?.Dispose();
         _cancellationTokenSource = new CancellationTokenSource();
@@ -867,8 +877,6 @@
         _selectedFiles.Clear();
         _selectedImages.Clear();
         _inputKey++;
-
-        var agent = _activeAgent!;
 
         try
         {
@@ -910,9 +918,12 @@
             Func<ToolInvocation, Task> onTool = async invocation =>
             {
                 if (cancellationToken.IsCancellationRequested) return;
-                _incomingActivity = invocation.Done
+                var line = invocation.Done
                     ? $"🔧 finished {invocation.ToolName}"
                     : $"🔧 calling {invocation.ToolName}";
+                _incomingActivity = string.IsNullOrEmpty(_incomingActivity)
+                    ? line
+                    : _incomingActivity + "\n" + line;
                 await InvokeAsync(StateHasChanged);
             };
 
@@ -929,6 +940,8 @@
                 Time = DateTime.Now
             };
             assistantMsg.Properties["AgentName"] = agent.Name;
+            if (!string.IsNullOrWhiteSpace(_incomingActivity))
+                assistantMsg.Properties["AgentActivity"] = _incomingActivity;
             Chat.Messages.Add(assistantMsg);
 
             await JS.InvokeVoidAsync("scrollManager.saveScrollPosition", "messages-container");
@@ -949,6 +962,8 @@
                     Time = DateTime.Now
                 };
                 partialMsg.Properties["AgentName"] = agent.Name;
+                if (!string.IsNullOrWhiteSpace(_incomingActivity))
+                    partialMsg.Properties["AgentActivity"] = _incomingActivity;
                 Chat.Messages.Add(partialMsg);
                 RebuildMessagesWithFiles();
             }
@@ -1011,6 +1026,13 @@
         conversation.ShowReason = !conversation.ShowReason;
     }
 
+    private async Task ToggleActivity(MessageExt conversation)
+    {
+        await JS.InvokeVoidAsync("scrollManager.saveScrollPosition", "messages-container");
+        _preserveScroll = true;
+        conversation.ShowActivity = !conversation.ShowActivity;
+    }
+
     private void RebuildMessagesWithFiles()
     {
         var existingFilesMap = Messages
@@ -1024,6 +1046,9 @@
         var existingReasonMap = Messages
             .ToDictionary(m => m.Message, m => m.ShowReason);
 
+        var existingActivityMap = Messages
+            .ToDictionary(m => m.Message, m => m.ShowActivity);
+
         Messages = Chat.Messages.Select(x => new MessageExt
         {
             Message = x,
@@ -1033,7 +1058,9 @@
             HasReasoning = x.Tokens.Any(t => t.Type == TokenType.Reason),
             ComputedContent = GetMessageContent(x),
             ComputedReasoning = GetReasoningContent(x),
-            AgentName = x.Properties.TryGetValue("AgentName", out var n) ? n : null
+            AgentName = x.Properties.TryGetValue("AgentName", out var n) ? n : null,
+            ShowActivity = existingActivityMap.TryGetValue(x, out var showAct) && showAct,
+            ToolActivity = x.Properties.TryGetValue("AgentActivity", out var act) ? act : string.Empty
         }).ToList();
     }
 
