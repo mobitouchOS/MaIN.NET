@@ -1,6 +1,8 @@
 using MaIN.Core.Hub;
 using MaIN.Domain.Entities.Agents;
 using MaIN.Domain.Entities.Tools;
+using MaIN.Domain.Exceptions.Agents;
+using MaIN.Domain.Models.Abstract;
 using MaIN.Services.Services.LLMService.Utils;
 
 namespace MaIN.InferPage.Services;
@@ -23,6 +25,35 @@ public sealed class AgentDefinitionService(IHttpClientFactory httpClientFactory,
     {
         var builder = AIHub.Agent()
             .WithModel(request.ModelId)
+            .WithName(request.Name)
+            .WithInitialPrompt(request.SystemPrompt);
+
+        var toolsConfig = BuildToolsConfiguration(request.ToolNames);
+        if (toolsConfig is not null)
+        {
+            builder = builder.WithTools(toolsConfig);
+        }
+
+        var executor = await builder.CreateAsync();
+        return executor.GetAgent();
+    }
+
+    public async Task<Agent> UpdateAsync(string id, CreateAgentRequest request)
+    {
+        // Validate the model before deleting so a bad model id can't lose the agent. Note: delete+recreate is
+        // not atomic — a transient failure during the recreate below would lose the agent (acceptable for this admin panel).
+        if (!ModelRegistry.Exists(request.ModelId))
+        {
+            throw new AgentModelNotAvailableException(id, request.ModelId);
+        }
+
+        await DeleteAsync(id);
+
+        // Recreate with the same id (keeps agent:<id> refs + active-agent selection valid),
+        // rebuilding the agent's chat with the new prompt/tools.
+        var builder = AIHub.Agent()
+            .WithModel(request.ModelId)
+            .WithId(id)
             .WithName(request.Name)
             .WithInitialPrompt(request.SystemPrompt);
 

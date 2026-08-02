@@ -48,6 +48,7 @@
 .agents-form label { font-weight: 600; margin-top: 0.5rem; }
 .agent-card { display: flex; align-items: center; justify-content: space-between;
     border: 1px solid var(--neutral-stroke-rest); border-radius: 8px; padding: 0.75rem 1rem; }
+.agent-card.active { border-color: var(--accent-base-color); background: color-mix(in srgb, var(--accent-base-color) 12%, transparent); }
 .agent-card-main { display: flex; flex-direction: column; gap: 0.15rem; }
 .agent-ref { font-size: 0.75rem; opacity: 0.7; }
 .tool-list { display: flex; flex-direction: column; gap: 0.4rem; }
