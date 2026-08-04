@@ -167,6 +167,7 @@ public static class Utils
 public sealed class TranscriptSegment
 {
     public bool IsTool { get; set; }
+    public bool IsReasoning { get; set; }
     public string Text { get; set; } = string.Empty;
 }
 

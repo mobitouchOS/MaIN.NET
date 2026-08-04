@@ -67,12 +67,20 @@
                         {
                             <span class="agent-badge">🤖 @conversation.AgentName</span>
                         }
+                        @if (conversation.Transcript?.Any(s => s.IsReasoning) == true)
+                        {
+                            <span class="brain-toggle" title="@(conversation.ShowReason ? "Hide reasoning" : "Show reasoning")"
+                                  @onclick="@(() => ToggleReasoning(conversation))">
+                                <FluentIcon Value="@(new Icons.Regular.Size20.Brain())"
+                                            Style="@($"fill: {(conversation.ShowReason ? "var(--accent-base-color)" : "var(--neutral-foreground-hint)")};")"/>
+                            </span>
+                        }
                         @if (conversation.Transcript is { Count: > 0 })
                         {
                             <span class="activity-toggle" title="@(conversation.ShowActivity ? "Hide activity" : "Show activity")"
                                   @onclick="@(() => ToggleActivity(conversation))">
                                 <FluentIcon Value="@(new Icons.Regular.Size20.Wrench())"
-                                            Style="@($"fill: {(conversation.ShowActivity ? "var(--accent-base-color)" : "var(--neutral-foreground-hint)")};")"/>
+                                            Style="@($"fill: {(conversation.ShowActivity ? "#e3b341" : "var(--neutral-foreground-hint)")};")"/>
                             </span>
                         }
                     </div>
@@ -133,47 +141,53 @@
                         else
                         {
                             <div>
-                                @if (conversation.HasReasoning)
-                                {
-                                    <div class="reasoning-row">
-                                        <span class="brain-toggle" title="@(conversation.ShowReason ? "Hide reasoning" : "Show reasoning")"
-                                              @onclick="@(() => ToggleReasoning(conversation))">
-                                            <FluentIcon Value="@(new Icons.Regular.Size24.Brain())"
-                                                        Style="@($"fill: {(conversation.ShowReason ? "var(--accent-base-color)" : "var(--neutral-foreground-hint)")};")"/>
-                                        </span>
-                                        @if (conversation.ShowReason)
-                                        {
-                                            <div class="thinker reasoning-text"
-                                                 style="border-radius: 10px; padding: 10px; border-width: 2px; background-color: var(--neutral-fill-hover)">
-                                                @((MarkupString)Markdown.ToHtml(conversation.ComputedReasoning, _markdownPipeline))
-                                            </div>
-                                        }
-                                    </div>
-                                    <hr class="reasoning-hr"/>
-                                }
                                 @if (conversation.Transcript is { Count: > 0 })
                                 {
-                                    @if (conversation.ShowActivity)
+                                    @* Reasoning is interleaved in chronological order, same as tool calls; each kind has its own toggle in agent-meta-row. *@
+                                    @for (var i = 0; i < conversation.Transcript.Count; i++)
                                     {
-                                        @foreach (var segment in conversation.Transcript)
+                                        var segment = conversation.Transcript[i];
+                                        var previous = i > 0 ? conversation.Transcript[i - 1] : null;
+                                        @if (segment.IsReasoning)
                                         {
-                                            @if (segment.IsTool)
+                                            @if (conversation.ShowReason)
                                             {
-                                                <div class="agent-activity">@segment.Text</div>
-                                            }
-                                            else
-                                            {
-                                                <div>@((MarkupString)Markdown.ToHtml(segment.Text, _markdownPipeline))</div>
+                                                <div class="@SegmentCssClass(previous, segment)">@((MarkupString)Markdown.ToHtml(segment.Text, _markdownPipeline))</div>
                                             }
                                         }
-                                    }
-                                    else
-                                    {
-                                        @((MarkupString)Markdown.ToHtml(conversation.ComputedContent, _markdownPipeline))
+                                        else if (segment.IsTool)
+                                        {
+                                            @if (conversation.ShowActivity)
+                                            {
+                                                <div class="@SegmentCssClass(previous, segment)">@segment.Text</div>
+                                            }
+                                        }
+                                        else
+                                        {
+                                            <div class="@SegmentCssClass(previous, segment)">@((MarkupString)Markdown.ToHtml(segment.Text, _markdownPipeline))</div>
+                                        }
                                     }
                                 }
                                 else
                                 {
+                                    @if (conversation.HasReasoning)
+                                    {
+                                        <div class="reasoning-row">
+                                            <span class="brain-toggle" title="@(conversation.ShowReason ? "Hide reasoning" : "Show reasoning")"
+                                                  @onclick="@(() => ToggleReasoning(conversation))">
+                                                <FluentIcon Value="@(new Icons.Regular.Size24.Brain())"
+                                                            Style="@($"fill: {(conversation.ShowReason ? "var(--accent-base-color)" : "var(--neutral-foreground-hint)")};")"/>
+                                            </span>
+                                            @if (conversation.ShowReason)
+                                            {
+                                                <div class="thinker reasoning-text"
+                                                     style="border-radius: 10px; padding: 10px; border-width: 2px; background-color: var(--neutral-fill-hover)">
+                                                    @((MarkupString)Markdown.ToHtml(conversation.ComputedReasoning, _markdownPipeline))
+                                                </div>
+                                            }
+                                        </div>
+                                        <hr class="reasoning-hr"/>
+                                    }
                                     @((MarkupString)Markdown.ToHtml(conversation.ComputedContent, _markdownPipeline))
                                 }
                             </div>
@@ -203,15 +217,21 @@
                     }
                     else if (_incomingTranscript.Count > 0)
                     {
-                        @foreach (var segment in _incomingTranscript)
+                        @for (var i = 0; i < _incomingTranscript.Count; i++)
                         {
-                            @if (segment.IsTool)
+                            var segment = _incomingTranscript[i];
+                            var previous = i > 0 ? _incomingTranscript[i - 1] : null;
+                            @if (segment.IsReasoning)
                             {
-                                <div class="agent-activity">@segment.Text</div>
+                                <div class="@SegmentCssClass(previous, segment)">@((MarkupString)Markdown.ToHtml(segment.Text, _markdownPipeline))</div>
+                            }
+                            else if (segment.IsTool)
+                            {
+                                <div class="@SegmentCssClass(previous, segment)">@segment.Text</div>
                             }
                             else
                             {
-                                <div>@((MarkupString)Markdown.ToHtml(segment.Text, _markdownPipeline))</div>
+                                <div class="@SegmentCssClass(previous, segment)">@((MarkupString)Markdown.ToHtml(segment.Text, _markdownPipeline))</div>
                             }
                         }
                     }
@@ -941,23 +961,32 @@
 
                 if (token.Type == TokenType.Reason)
                 {
-                    _isThinking = true;
                     _incomingReasoning += token.Text;
+                    var lastReasoningSegment = _incomingTranscript.LastOrDefault();
+                    if (lastReasoningSegment is { IsReasoning: true })
+                    {
+                        lastReasoningSegment.Text += token.Text;
+                    }
+                    else
+                    {
+                        _incomingTranscript.Add(new TranscriptSegment { IsReasoning = true, Text = token.Text });
+                    }
                     await InvokeAsync(StateHasChanged);
+                    if (wasAtBottom)
+                        await InvokeAsync(async () => await JS.InvokeVoidAsync("scrollManager.scrollToBottomSmooth", "messages-container"));
                     return;
                 }
 
                 if (token.Type != TokenType.Message) return;
-                _isThinking = false;
                 _incomingMessage += token.Text;
                 var lastSegment = _incomingTranscript.LastOrDefault();
-                if (lastSegment is not null && !lastSegment.IsTool)
+                if (lastSegment is { IsTool: false, IsReasoning: false })
                 {
                     lastSegment.Text += token.Text;
                 }
                 else
                 {
-                    _incomingTranscript.Add(new TranscriptSegment { IsTool = false, Text = token.Text });
+                    _incomingTranscript.Add(new TranscriptSegment { Text = token.Text });
                 }
                 await InvokeAsync(StateHasChanged);
                 if (wasAtBottom)
@@ -1053,6 +1082,15 @@
     private void HandleInput(ChangeEventArgs obj)
     {
         // Handled by JS on send to ensure accuracy
+    }
+
+    // Adds breathing room at a segment kind boundary (thinking -> tool -> answer text) so the
+    // interleaved transcript doesn't read as one undifferentiated block of lines.
+    private static string SegmentCssClass(TranscriptSegment? previous, TranscriptSegment current)
+    {
+        var baseClass = current.IsReasoning ? "thinker" : current.IsTool ? "agent-activity" : string.Empty;
+        var kindChanged = previous is not null && (previous.IsTool != current.IsTool || previous.IsReasoning != current.IsReasoning);
+        return kindChanged ? $"{baseClass} segment-gap".Trim() : baseClass;
     }
 
     private string GetMessageContent(Message message)

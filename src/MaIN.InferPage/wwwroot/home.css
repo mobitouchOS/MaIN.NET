@@ -289,10 +289,16 @@ body {
     display: inline-flex;
     align-items: center;
     flex-shrink: 0;
-    margin-top: 10px;
     cursor: pointer;
     opacity: 0.85;
     transition: opacity 0.15s;
+}
+
+/* .reasoning-row uses align-items: flex-start (the reasoning text below can wrap to multiple lines),
+   so the icon needs a nudge down to line up with the first line -- agent-meta-row is a single-line
+   flex row with align-items: center and doesn't need this. */
+.reasoning-row .brain-toggle {
+    margin-top: 10px;
 }
 
 .brain-toggle:hover {
@@ -490,6 +496,11 @@ body {
 
 .activity-toggle:hover {
     opacity: 1;
+}
+
+/* Extra breathing room where the transcript switches kind (thinking <-> tool <-> answer text) */
+.segment-gap {
+    margin-top: 0.9rem;
 }
 
 /* Tool-call activity text — italic and muted, distinct from the reply */
