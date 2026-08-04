@@ -17,9 +17,7 @@ services:
       # self (default) | openai | gemini | deepseek | groqcloud | anthropic | xai | ollama
       backend: ${BACKEND:-self}
       MaIN__ApiKey: ${MAIN_API_KEY:-}
-      # SECURITY: off by default. MCP servers run an arbitrary command on this container with no
-      # sandboxing, so only enable this if you trust everyone with access to the /agents UI.
-      # Set MAIN_ALLOW_MCP_CONFIGURATION=true to opt in.
+      # SECURITY: off by default -- MCP servers run an arbitrary command on this container, unsandboxed.
       MaIN__AllowMcpConfiguration: ${MAIN_ALLOW_MCP_CONFIGURATION:-false}
       # SearXNG is bundled in the default runtime-cpu and runtime-cuda images.
       # Override only if you run SearXNG externally.
