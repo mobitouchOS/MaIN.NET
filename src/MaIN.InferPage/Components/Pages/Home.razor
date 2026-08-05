@@ -1017,7 +1017,10 @@
             };
             assistantMsg.Properties["AgentName"] = agent.Name;
             if (_incomingTranscript.Count > 0)
+            {
+                _incomingTranscript.Add(new TranscriptSegment { Text = content });
                 assistantMsg.Properties["AgentTranscript"] = JsonSerializer.Serialize(_incomingTranscript);
+            }
             if (!string.IsNullOrWhiteSpace(_incomingReasoning))
                 assistantMsg.Tokens.Add(new LLMTokenValue { Text = _incomingReasoning, Type = TokenType.Reason });
             Chat.Messages.Add(assistantMsg);

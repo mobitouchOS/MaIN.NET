@@ -25,7 +25,7 @@
         Fill="highlight"
         BackgroundColor="#ffd800;"
         Color="#000"
-        Style="margin-left: 10px">@Utils.Model</FluentBadge>
+        Style="margin-left: 10px">@(ActiveAgent.Current?.Model ?? Utils.Model)</FluentBadge>
     @if (Utils.Reason)
     {
         <FluentBadge
