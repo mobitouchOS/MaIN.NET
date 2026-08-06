@@ -4,6 +4,8 @@
 @inject NavigationManager _navigationManager
 @inject IJSRuntime JS
 @inject SettingsStateService SettingsState
+@inject AgentsPanelStateService AgentsPanelState
+@inject ActiveAgentState ActiveAgent
 @implements IDisposable
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 
@@ -23,7 +25,7 @@
         Fill="highlight"
         BackgroundColor="#ffd800;"
         Color="#000"
-        Style="margin-left: 10px">@Utils.Model</FluentBadge>
+        Style="margin-left: 10px">@(ActiveAgent.Current?.Model ?? Utils.Model)</FluentBadge>
     @if (Utils.Reason)
     {
         <FluentBadge
@@ -50,7 +52,27 @@
             Color="#fff"
             Style="margin-left: 10px">Vision 👁️</FluentBadge>
     }
+    @if (ActiveAgent.Current is not null)
+    {
+        <FluentBadge
+            Appearance="Appearance.Neutral"
+            Fill="highlight"
+            BackgroundColor="#6366f1"
+            Color="#fff"
+            Style="margin-left: 10px">
+            🤖 @ActiveAgent.Current.Name
+            <span title="Exit agent" style="cursor: pointer; margin-left: 6px; font-weight: bold;"
+                  @onclick="@(() => ActiveAgent.Clear())">✕</span>
+        </FluentBadge>
+    }
     <div  style="margin-left: auto; align-self: flex-end;">
+        <FluentButton Style="background-color: transparent;"
+                      BackgroundColor="rgba(0, 0, 0, 0)"
+                      Appearance="Appearance.Lightweight"
+                      OnClick="@(() => AgentsPanelState.Request())"
+                      IconStart="@(new Icons.Regular.Size24.Bot().WithColor(AccentColor))"
+                      Title="Agents">
+        </FluentButton>
         <FluentButton Style="background-color: transparent;"
                       BackgroundColor="rgba(0, 0, 0, 0)"
                       Appearance="Appearance.Lightweight"
@@ -80,11 +102,17 @@
             var stored = await JS.InvokeAsync<string>("themeManager.load");
             Mode = stored == "dark" ? DesignThemeModes.Dark : DesignThemeModes.Light;
             SettingsState.OnSettingsApplied += OnSettingsChanged;
+            ActiveAgent.OnChanged += OnActiveAgentChanged;
             StateHasChanged();
         }
     }
 
     private void OnSettingsChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void OnActiveAgentChanged()
     {
         InvokeAsync(StateHasChanged);
     }
@@ -113,5 +141,6 @@
     public void Dispose()
     {
         SettingsState.OnSettingsApplied -= OnSettingsChanged;
+        ActiveAgent.OnChanged -= OnActiveAgentChanged;
     }
 }

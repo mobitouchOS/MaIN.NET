@@ -56,6 +56,12 @@ public static class HostedToolsResolver
                 tool = UrlMetadataExtractorTool.Create(httpClientFactory, toolName: normalized);
                 return true;
 
+            case "calculator":
+            case "calc":
+            case "evaluate_expression":
+                tool = CalculatorTool.Create(toolName: normalized);
+                return true;
+
             default:
                 tool = null;
                 return false;
@@ -71,7 +77,8 @@ public static class HostedToolsResolver
             DateTimeTool.Create(),
             HttpRequestTool.Create(httpClientFactory),
             RssFeedReaderTool.Create(httpClientFactory),
-            UrlMetadataExtractorTool.Create(httpClientFactory)
+            UrlMetadataExtractorTool.Create(httpClientFactory),
+            CalculatorTool.Create()
         ];
     }
 }

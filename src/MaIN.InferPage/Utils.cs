@@ -16,6 +16,13 @@ public static class Utils
 
     public static bool NeedsConfiguration { get; set; }
 
+    /// <summary>
+    /// SECURITY: an MCP server's Command is executed verbatim as an OS process on this machine with no
+    /// sandboxing, so the agent configurator hides MCP entirely unless the host operator opts in by setting
+    /// MaIN:AllowMcpConfiguration. Must stay false by default.
+    /// </summary>
+    public static bool AllowMcpConfiguration { get; set; }
+
     public static string DefaultModelsPath => System.IO.Path.Combine(Directory.GetCurrentDirectory(), "models");
 
     /// <summary>
@@ -157,6 +164,13 @@ public static class Utils
     ];
 }
 
+public sealed class TranscriptSegment
+{
+    public bool IsTool { get; set; }
+    public bool IsReasoning { get; set; }
+    public string Text { get; set; } = string.Empty;
+}
+
 public class MessageExt
 {
     public required Message Message { get; set; }
@@ -166,4 +180,7 @@ public class MessageExt
     public string ComputedReasoning { get; set; } = string.Empty;
     public List<string> AttachedFiles { get; set; } = new();
     public List<(string Name, string Base64)> AttachedImages { get; set; } = new();
+    public string? AgentName { get; set; }
+    public bool ShowActivity { get; set; }
+    public List<TranscriptSegment>? Transcript { get; set; }
 }

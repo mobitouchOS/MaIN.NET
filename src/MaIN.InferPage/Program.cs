@@ -47,9 +47,13 @@ builder.Services.AddRazorComponents()
 builder.Services.AddFluentUIComponents();
 builder.Services.AddScoped<SettingsService>();
 builder.Services.AddScoped<SettingsStateService>();
+builder.Services.AddScoped<AgentsPanelStateService>();
+builder.Services.AddScoped<ActiveAgentState>();
 builder.Services.AddOpenApi();
 
 builder.Services.AddSingleton<ApiLogService>();
+builder.Services.AddSingleton<AgentDefinitionService>();
+builder.Services.AddSingleton<AgentRunner>();
 
 if (!builder.Environment.IsDevelopment())
 {
@@ -59,6 +63,10 @@ if (!builder.Environment.IsDevelopment())
         .SetApplicationName("MaIN.InferPage")
         .PersistKeysToFileSystem(new DirectoryInfo("/app/DataProtection-Keys"));
 }
+
+// SECURITY: MCP servers run an arbitrary command on this machine with no sandboxing, so the agent
+// configurator never shows MCP unless the host operator explicitly opts in. Absent key => false.
+Utils.AllowMcpConfiguration = builder.Configuration.GetValue<bool>("MaIN:AllowMcpConfiguration");
 
 try
 {

@@ -20,6 +20,23 @@ namespace MaIN.Services.Services;
 
 public class McpService(MaINSettings settings, IServiceProvider serviceProvider, ILogger<McpService>? logger = null) : IMcpService
 {
+    // EnsureSuccessStatusCode() throws before the body is read, discarding the provider's error detail
+    // (e.g. OpenAI's specific "invalid schema for function ..." message) — read first, then throw with it.
+    private async Task<string> ReadResponseOrThrowAsync(HttpResponseMessage response)
+    {
+        var responseText = await response.Content.ReadAsStringAsync();
+        if (!response.IsSuccessStatusCode)
+        {
+            logger?.LogError(
+                "MCP LLM request failed: {StatusCode} {ReasonPhrase} - {Body}",
+                (int)response.StatusCode, response.ReasonPhrase, responseText);
+            throw new HttpRequestException(
+                $"MCP LLM request failed: {(int)response.StatusCode} {response.ReasonPhrase} - {responseText}",
+                inner: null, response.StatusCode);
+        }
+        return responseText;
+    }
+
     public async Task<McpResult> Prompt(Mcp config, List<Message> messageHistory, int? maxIterations = null)
     {
         await using var mcpClient = await McpClientFactory.CreateAsync(
@@ -99,8 +116,7 @@ public class McpService(MaINSettings settings, IServiceProvider serviceProvider,
             var response = await client.PostAsync(url,
                 new StringContent(json, Encoding.UTF8, "application/json"));
 
-            response.EnsureSuccessStatusCode();
-            var responseText = await response.Content.ReadAsStringAsync();
+            var responseText = await ReadResponseOrThrowAsync(response);
             var responseDoc = JsonDocument.Parse(responseText);
             var message = responseDoc.RootElement
                 .GetProperty("choices")[0]
@@ -167,9 +183,7 @@ public class McpService(MaINSettings settings, IServiceProvider serviceProvider,
         var finalJson = JsonSerializer.Serialize(finalRequestBody);
         var finalResponse = await client.PostAsync(url,
             new StringContent(finalJson, Encoding.UTF8, "application/json"));
-        finalResponse.EnsureSuccessStatusCode();
-
-        var finalResponseText = await finalResponse.Content.ReadAsStringAsync();
+        var finalResponseText = await ReadResponseOrThrowAsync(finalResponse);
         var finalDoc = JsonDocument.Parse(finalResponseText);
         var finalMessage = finalDoc.RootElement
             .GetProperty("choices")[0]
@@ -235,9 +249,7 @@ public class McpService(MaINSettings settings, IServiceProvider serviceProvider,
             var json = JsonSerializer.Serialize(requestBody);
             var response = await client.PostAsync("https://api.anthropic.com/v1/messages",
                 new StringContent(json, Encoding.UTF8, "application/json"));
-            response.EnsureSuccessStatusCode();
-
-            var responseText = await response.Content.ReadAsStringAsync();
+            var responseText = await ReadResponseOrThrowAsync(response);
             var responseDoc = JsonDocument.Parse(responseText);
             var contentBlocks = responseDoc.RootElement.GetProperty("content").EnumerateArray().ToList();
             var stopReason = responseDoc.RootElement.TryGetProperty("stop_reason", out var sr)
@@ -327,9 +339,7 @@ public class McpService(MaINSettings settings, IServiceProvider serviceProvider,
         var finalJson = JsonSerializer.Serialize(finalRequestBody);
         var finalResponse = await client.PostAsync("https://api.anthropic.com/v1/messages",
             new StringContent(finalJson, Encoding.UTF8, "application/json"));
-        finalResponse.EnsureSuccessStatusCode();
-
-        var finalResponseText = await finalResponse.Content.ReadAsStringAsync();
+        var finalResponseText = await ReadResponseOrThrowAsync(finalResponse);
         var finalDoc = JsonDocument.Parse(finalResponseText);
         var finalContent = string.Concat(finalDoc.RootElement
             .GetProperty("content")

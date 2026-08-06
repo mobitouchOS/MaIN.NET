@@ -1,0 +1,88 @@
+/* Overlay/backdrop/blur mirrors settings.css so the agents panel matches Settings. */
+.settings-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 5000;
+    backdrop-filter: blur(3px);
+}
+
+.settings-panel {
+    background: var(--neutral-layer-1);
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    max-height: 95vh;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+}
+
+.settings-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 24px 12px;
+    border-bottom: 1px solid var(--neutral-stroke-rest);
+}
+
+.settings-header h2 {
+    margin: 0;
+    color: var(--accent-base-color);
+    font-size: 1.25rem;
+}
+
+.settings-body {
+    padding: 20px 24px;
+}
+
+.agents-panel { width: 60vw; min-width: 640px; max-width: 90vw; }
+
+.agents-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
+.agents-list, .agents-form { display: flex; flex-direction: column; gap: 0.75rem; }
+.agents-form label { font-weight: 600; margin-top: 0.5rem; }
+.agent-card { display: flex; align-items: center; justify-content: space-between;
+    border: 1px solid var(--neutral-stroke-rest); border-radius: 8px; padding: 0.75rem 1rem; }
+.agent-card.active { border-color: var(--accent-base-color); background: color-mix(in srgb, var(--accent-base-color) 12%, transparent); }
+.agent-card-main { display: flex; flex-direction: column; gap: 0.15rem; }
+.agent-ref { font-size: 0.75rem; opacity: 0.7; }
+.tool-list { display: flex; flex-direction: column; gap: 0.4rem; }
+.muted { opacity: 0.6; }
+.error { color: var(--error-foreground-rest); }
+
+/* SECURITY warning for the MCP section — must stay visually loud. */
+.mcp-warning {
+    border: 1px solid #d13438;
+    border-left-width: 4px;
+    border-radius: 6px;
+    background: rgba(209, 52, 56, 0.12);
+    color: #d13438;
+    font-weight: 600;
+    padding: 0.6rem 0.75rem;
+    line-height: 1.35;
+}
+.mcp-note { color: var(--error-foreground-rest); font-size: 0.8rem; margin: 0; }
+
+/* Badge marking an agent card as running an MCP server (arbitrary process execution). */
+.mcp-badge {
+    display: inline-block;
+    padding: 0.05rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    background: rgba(209, 52, 56, 0.15);
+    color: #d13438;
+}
+
+.agent-card-actions { display: flex; gap: 0.25rem; }
+
+@media (max-width: 800px) {
+    .agents-panel { width: 95vw; min-width: 0; }
+    .agents-layout { grid-template-columns: 1fr; }
+}

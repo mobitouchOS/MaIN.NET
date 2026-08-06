@@ -15,16 +15,23 @@ public static class ToolCallParser
     public static ToolParseResult ParseToolCalls(string response, ToolFormatDetector.ToolCallFormat format = ToolFormatDetector.ToolCallFormat.HermesJson)
     {
         if (string.IsNullOrWhiteSpace(response))
-            return ToolParseResult.Failure("Response is empty.");
-
-        var jsonContent = ExtractJsonContent(response, format);
-
-        if (string.IsNullOrEmpty(jsonContent))
             return ToolParseResult.ToolNotFound();
+
+        var extracted = ExtractJsonContent(response, format);
+
+        if (string.IsNullOrEmpty(extracted.Content))
+            return ToolParseResult.ToolNotFound();
+
+        // A failure to fully validate as a tool call is only a "please fix your JSON" error when the
+        // model's own explicit tool-call marker (<tool_call>, [TOOL_CALLS], etc.) was actually present --
+        // that's a real, malformed attempt. When there was no such marker and this candidate only came
+        // from scanning the text for a stray brace/bracket pair, a failure just means it wasn't a tool
+        // call at all (e.g. a plain answer that happens to mention "{23}"), not an error to correct.
+        ToolParseResult NotATool(string error) => extracted.IsExplicitMatch ? ToolParseResult.Failure(error) : ToolParseResult.ToolNotFound();
 
         try
         {
-            using var doc = JsonDocument.Parse(jsonContent);
+            using var doc = JsonDocument.Parse(extracted.Content);
             var root = doc.RootElement;
 
             if (root.ValueKind == JsonValueKind.Array)
@@ -46,7 +53,7 @@ public static class ToolCallParser
                 // Standard format: {"tool_calls": [...]}
                 if (root.TryGetProperty("tool_calls", out var toolCallsEl) && toolCallsEl.ValueKind == JsonValueKind.Array)
                 {
-                    var wrapper = JsonSerializer.Deserialize<ToolResponseWrapper>(jsonContent, JsonOptions);
+                    var wrapper = JsonSerializer.Deserialize<ToolResponseWrapper>(extracted.Content, JsonOptions);
                     if (wrapper?.ToolCalls is not null && wrapper.ToolCalls.Count != 0)
                         return ToolParseResult.Success(NormalizeToolCalls(wrapper.ToolCalls));
                 }
@@ -57,11 +64,11 @@ public static class ToolCallParser
                     return ToolParseResult.Success(new List<ToolCall> { singleCall });
             }
 
-            return ToolParseResult.Failure("JSON parsed correctly but no tool calls could be extracted.");
+            return NotATool("JSON parsed correctly but no tool calls could be extracted.");
         }
         catch (JsonException ex)
         {
-            return ToolParseResult.Failure($"Invalid JSON format: {ex.Message}");
+            return NotATool($"Invalid JSON format: {ex.Message}");
         }
     }
 
@@ -91,10 +98,14 @@ public static class ToolCallParser
         };
     }
 
-    private static string? ExtractJsonContent(string text, ToolFormatDetector.ToolCallFormat format)
+    // IsExplicitMatch: true when the model's own format-specific tag (<tool_call>, [TOOL_CALLS], ...)
+    // was found; false when this candidate only came from a generic brace/bracket scan of plain text.
+    private readonly record struct ExtractedToolJson(string? Content, bool IsExplicitMatch);
+
+    private static ExtractedToolJson ExtractJsonContent(string text, ToolFormatDetector.ToolCallFormat format)
     {
         if (string.IsNullOrWhiteSpace(text))
-            return null;
+            return default;
 
         text = text.Trim();
 
@@ -105,11 +116,11 @@ public static class ToolCallParser
             ToolFormatDetector.ToolCallFormat.Llama3 => ExtractFromLlama3Format(text),
             ToolFormatDetector.ToolCallFormat.MistralV3 => ExtractFromMistralV3Format(text),
             ToolFormatDetector.ToolCallFormat.Phi3 => ExtractFromPhi3Format(text),
-            _ => ExtractFromCodeBlock(text) ?? FindBalancedJson(text) ?? ExtractPartialJson(text)
+            _ => new ExtractedToolJson(ExtractFromCodeBlock(text) ?? FindBalancedJson(text) ?? ExtractPartialJson(text), false)
         };
     }
 
-    private static string? ExtractFromQwen3XmlFormat(string text)
+    private static ExtractedToolJson ExtractFromQwen3XmlFormat(string text)
     {
         // Qwen3.5 / Qwen3-Coder XML format:
         // <tool_call><function=name><parameter=k>v</parameter></function></tool_call>
@@ -118,7 +129,10 @@ public static class ToolCallParser
             text, @"<function=([a-zA-Z0-9_]+)>",
             System.Text.RegularExpressions.RegexOptions.None);
         if (!functionMatch.Success)
-            return ExtractFromCodeBlock(text) ?? FindBalancedJson(text) ?? ExtractPartialJson(text);
+            // No Qwen3 tag -- fall back to a generic scan in case the model forgot the wrapper but
+            // still emitted a recognisable tool-call JSON body; a non-explicit match downgrades any
+            // parse failure to "not a tool call" instead of a correction-worthy error.
+            return new ExtractedToolJson(ExtractFromCodeBlock(text) ?? FindBalancedJson(text) ?? ExtractPartialJson(text), false);
 
         var functionName = functionMatch.Groups[1].Value;
         var arguments = new Dictionary<string, object?>();
@@ -135,7 +149,7 @@ public static class ToolCallParser
         }
 
         var toolCallObj = new { name = functionName, arguments };
-        return JsonSerializer.Serialize(toolCallObj);
+        return new ExtractedToolJson(JsonSerializer.Serialize(toolCallObj), true);
     }
 
     private static object? TryParseValue(string value)
@@ -155,7 +169,7 @@ public static class ToolCallParser
         return value;
     }
 
-    private static string? ExtractFromGraniteFormat(string text)
+    private static ExtractedToolJson ExtractFromGraniteFormat(string text)
     {
         // IBM Granite format: <tool_call>{"name":..., "arguments":...}</tool_call>
         // The JSON inside is a single object, not wrapped in a tool_calls array
@@ -163,13 +177,16 @@ public static class ToolCallParser
             text, @"<tool_call>\s*(\{.*?\})\s*</tool_call>",
             System.Text.RegularExpressions.RegexOptions.Singleline);
         if (toolCallMatch.Success)
-            return toolCallMatch.Groups[1].Value;
+            return new ExtractedToolJson(toolCallMatch.Groups[1].Value, true);
 
-        // Fallback to generic extraction
-        return ExtractFromCodeBlock(text) ?? FindBalancedJson(text) ?? ExtractPartialJson(text);
+        // No <tool_call> tag -- fall back to a generic scan in case the model forgot the wrapper but
+        // still emitted a recognisable tool-call JSON body (common for small models). A non-explicit
+        // match means a parse failure here reads as "just a plain answer", not a correctable error --
+        // otherwise ordinary prose containing e.g. "(23°C)" would misfire as a broken tool call.
+        return new ExtractedToolJson(ExtractFromCodeBlock(text) ?? FindBalancedJson(text) ?? ExtractPartialJson(text), false);
     }
 
-    private static string? ExtractFromLlama3Format(string text)
+    private static ExtractedToolJson ExtractFromLlama3Format(string text)
     {
         // Llama 3 format: <functioncall>{"name":..., "arguments":...}</functioncall>
         // or <|python_tag|>{...}
@@ -177,42 +194,42 @@ public static class ToolCallParser
             text, @"<functioncall>\s*(\{.*?\})\s*</functioncall>",
             System.Text.RegularExpressions.RegexOptions.Singleline);
         if (functionCallMatch.Success)
-            return functionCallMatch.Groups[1].Value;
+            return new ExtractedToolJson(functionCallMatch.Groups[1].Value, true);
 
         var pythonTagMatch = System.Text.RegularExpressions.Regex.Match(
             text, @"<\|python_tag\|>\s*(\{.*\})",
             System.Text.RegularExpressions.RegexOptions.Singleline);
         if (pythonTagMatch.Success)
-            return pythonTagMatch.Groups[1].Value;
+            return new ExtractedToolJson(pythonTagMatch.Groups[1].Value, true);
 
-        // Fallback to generic extraction
-        return ExtractFromCodeBlock(text) ?? FindBalancedJson(text) ?? ExtractPartialJson(text);
+        // Neither marker is present -- fall back to a generic scan (see ExtractFromGraniteFormat).
+        return new ExtractedToolJson(ExtractFromCodeBlock(text) ?? FindBalancedJson(text) ?? ExtractPartialJson(text), false);
     }
 
-    private static string? ExtractFromMistralV3Format(string text)
+    private static ExtractedToolJson ExtractFromMistralV3Format(string text)
     {
         // Mistral v3 format: [TOOL_CALLS][{"name":..., "arguments":...}]
         var toolCallsMatch = System.Text.RegularExpressions.Regex.Match(
             text, @"\[TOOL_CALLS\]\s*(\[.*?\])",
             System.Text.RegularExpressions.RegexOptions.Singleline);
         if (toolCallsMatch.Success)
-            return toolCallsMatch.Groups[1].Value;
+            return new ExtractedToolJson(toolCallsMatch.Groups[1].Value, true);
 
-        // Fallback to generic extraction
-        return ExtractFromCodeBlock(text) ?? FindBalancedJson(text) ?? ExtractPartialJson(text);
+        // No [TOOL_CALLS] marker -- fall back to a generic scan (see ExtractFromGraniteFormat).
+        return new ExtractedToolJson(ExtractFromCodeBlock(text) ?? FindBalancedJson(text) ?? ExtractPartialJson(text), false);
     }
 
-    private static string? ExtractFromPhi3Format(string text)
+    private static ExtractedToolJson ExtractFromPhi3Format(string text)
     {
         // Phi-3.5 format: <|tool_call|>{"name":..., "arguments":...}<|/tool_call|>
         var toolCallMatch = System.Text.RegularExpressions.Regex.Match(
             text, @"<\|tool_call\|>\s*(\{.*?\})\s*<\|/tool_call\|>",
             System.Text.RegularExpressions.RegexOptions.Singleline);
         if (toolCallMatch.Success)
-            return toolCallMatch.Groups[1].Value;
+            return new ExtractedToolJson(toolCallMatch.Groups[1].Value, true);
 
-        // Fallback to generic extraction
-        return ExtractFromCodeBlock(text) ?? FindBalancedJson(text) ?? ExtractPartialJson(text);
+        // No <|tool_call|> tag -- fall back to a generic scan (see ExtractFromGraniteFormat).
+        return new ExtractedToolJson(ExtractFromCodeBlock(text) ?? FindBalancedJson(text) ?? ExtractPartialJson(text), false);
     }
 
     private static string? ExtractFromCodeBlock(string text)

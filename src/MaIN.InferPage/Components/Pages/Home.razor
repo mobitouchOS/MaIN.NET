@@ -3,12 +3,17 @@
 @inject IJSRuntime JS
 @inject SettingsService SettingsStorage
 @inject SettingsStateService SettingsState
+@inject AgentsPanelStateService AgentsPanelState
+@inject ActiveAgentState ActiveAgentState
+@inject AgentRunner AgentRunner
 @inject MaINSettings MaINSettings
 @implements IDisposable
 @using MaIN.Core.Hub
 @using MaIN.Core.Hub.Contexts.Interfaces.ChatContext
 @using MaIN.Domain.Configuration
 @using MaIN.Domain.Entities
+@using MaIN.Domain.Entities.Agents
+@using MaIN.Domain.Entities.Tools
 @using MaIN.Domain.Configuration.BackendInferenceParams
 @using MaIN.Domain.Exceptions
 @using MaIN.Domain.Models
@@ -16,6 +21,7 @@
 @using MaIN.Services
 @using MaIN.Services.Constants
 @using Markdig
+@using System.Text.Json
 @using Message = MaIN.Domain.Entities.Message
 @using MessageType = MaIN.Domain.Entities.MessageType
 <link rel="stylesheet" href="home.css">
@@ -29,6 +35,11 @@
     <Settings ShowCloseButton="@_hasExistingConfig"
               OnSettingsApplied="@HandleSettingsApplied"
               OnClose="@HideSettings" />
+}
+
+@if (_showAgents)
+{
+    <AgentsPanel OnClose="@(() => { _showAgents = false; })" OnAgentSelected="@HandleAgentSelected" />
 }
 
 <div class="chat-container" id="chat-container">
@@ -49,6 +60,31 @@
         {
             @if (conversation.Message.Role != "System")
             {
+                @if (conversation.Message.Role != "User" && (!string.IsNullOrEmpty(conversation.AgentName) || conversation.Transcript is { Count: > 0 }))
+                {
+                    <div class="agent-meta-row">
+                        @if (!string.IsNullOrEmpty(conversation.AgentName))
+                        {
+                            <span class="agent-badge">🤖 @conversation.AgentName</span>
+                        }
+                        @if (conversation.Transcript?.Any(s => s.IsReasoning) == true)
+                        {
+                            <span class="brain-toggle" title="@(conversation.ShowReason ? "Hide reasoning" : "Show reasoning")"
+                                  @onclick="@(() => ToggleReasoning(conversation))">
+                                <FluentIcon Value="@(new Icons.Regular.Size20.Brain())"
+                                            Style="@($"fill: {(conversation.ShowReason ? "var(--accent-base-color)" : "var(--neutral-foreground-hint)")};")"/>
+                            </span>
+                        }
+                        @if (conversation.Transcript is { Count: > 0 })
+                        {
+                            <span class="activity-toggle" title="@(conversation.ShowActivity ? "Hide activity" : "Show activity")"
+                                  @onclick="@(() => ToggleActivity(conversation))">
+                                <FluentIcon Value="@(new Icons.Regular.Size20.Wrench())"
+                                            Style="@($"fill: {(conversation.ShowActivity ? "#e3b341" : "var(--neutral-foreground-hint)")};")"/>
+                            </span>
+                        }
+                    </div>
+                }
                 <FluentCard class="@(conversation.Message.Role == "User" ? "message-card user-message" : "message-card bot-message")">
                     @if (conversation.Message.Role == "User")
                     {
@@ -105,25 +141,55 @@
                         else
                         {
                             <div>
-                                @if (conversation.HasReasoning)
+                                @if (conversation.Transcript is { Count: > 0 })
                                 {
-                                    <div class="reasoning-row">
-                                        <span class="brain-toggle" title="@(conversation.ShowReason ? "Hide reasoning" : "Show reasoning")"
-                                              @onclick="@(() => ToggleReasoning(conversation))">
-                                            <FluentIcon Value="@(new Icons.Regular.Size24.Brain())"
-                                                        Style="@($"fill: {(conversation.ShowReason ? "var(--accent-base-color)" : "var(--neutral-foreground-hint)")};")"/>
-                                        </span>
-                                        @if (conversation.ShowReason)
+                                    @* Reasoning is interleaved in chronological order, same as tool calls; each kind has its own toggle in agent-meta-row. *@
+                                    @for (var i = 0; i < conversation.Transcript.Count; i++)
+                                    {
+                                        var segment = conversation.Transcript[i];
+                                        var previous = i > 0 ? conversation.Transcript[i - 1] : null;
+                                        @if (segment.IsReasoning)
                                         {
-                                            <div class="thinker reasoning-text"
-                                                 style="border-radius: 10px; padding: 10px; border-width: 2px; background-color: var(--neutral-fill-hover)">
-                                                @((MarkupString)Markdown.ToHtml(conversation.ComputedReasoning, _markdownPipeline))
-                                            </div>
+                                            @if (conversation.ShowReason)
+                                            {
+                                                <div class="@SegmentCssClass(previous, segment)">@((MarkupString)Markdown.ToHtml(segment.Text, _markdownPipeline))</div>
+                                            }
                                         }
-                                    </div>
-                                    <hr class="reasoning-hr"/>
+                                        else if (segment.IsTool)
+                                        {
+                                            @if (conversation.ShowActivity)
+                                            {
+                                                <div class="@SegmentCssClass(previous, segment)">@segment.Text</div>
+                                            }
+                                        }
+                                        else
+                                        {
+                                            <div class="@SegmentCssClass(previous, segment)">@((MarkupString)Markdown.ToHtml(segment.Text, _markdownPipeline))</div>
+                                        }
+                                    }
                                 }
-                                @((MarkupString)Markdown.ToHtml(conversation.ComputedContent, _markdownPipeline))
+                                else
+                                {
+                                    @if (conversation.HasReasoning)
+                                    {
+                                        <div class="reasoning-row">
+                                            <span class="brain-toggle" title="@(conversation.ShowReason ? "Hide reasoning" : "Show reasoning")"
+                                                  @onclick="@(() => ToggleReasoning(conversation))">
+                                                <FluentIcon Value="@(new Icons.Regular.Size24.Brain())"
+                                                            Style="@($"fill: {(conversation.ShowReason ? "var(--accent-base-color)" : "var(--neutral-foreground-hint)")};")"/>
+                                            </span>
+                                            @if (conversation.ShowReason)
+                                            {
+                                                <div class="thinker reasoning-text"
+                                                     style="border-radius: 10px; padding: 10px; border-width: 2px; background-color: var(--neutral-fill-hover)">
+                                                    @((MarkupString)Markdown.ToHtml(conversation.ComputedReasoning, _markdownPipeline))
+                                                </div>
+                                            }
+                                        </div>
+                                        <hr class="reasoning-hr"/>
+                                    }
+                                    @((MarkupString)Markdown.ToHtml(conversation.ComputedContent, _markdownPipeline))
+                                }
                             </div>
                         }
                     }
@@ -136,14 +202,38 @@
             {
                 <span class="message-role-bot" style="font-style: italic; font-size: small">This might take a while...</span>
             }
-            else if (_incomingMessage != null || _incomingReasoning != null)
+            else if (_incomingMessage != null || _incomingReasoning != null || _incomingTranscript.Count > 0)
             {
+                @if (ActiveAgentState.Current is not null)
+                {
+                    <span class="agent-badge">🤖 @ActiveAgentState.Current.Name</span>
+                }
                 <FluentCard class="message-card bot-message">
                     @if (_isThinking)
                     {
                         <span class="thinker">
                             @((MarkupString)Markdown.ToHtml(_incomingReasoning ?? string.Empty, _markdownPipeline))
                         </span>
+                    }
+                    else if (_incomingTranscript.Count > 0)
+                    {
+                        @for (var i = 0; i < _incomingTranscript.Count; i++)
+                        {
+                            var segment = _incomingTranscript[i];
+                            var previous = i > 0 ? _incomingTranscript[i - 1] : null;
+                            @if (segment.IsReasoning)
+                            {
+                                <div class="@SegmentCssClass(previous, segment)">@((MarkupString)Markdown.ToHtml(segment.Text, _markdownPipeline))</div>
+                            }
+                            else if (segment.IsTool)
+                            {
+                                <div class="@SegmentCssClass(previous, segment)">@segment.Text</div>
+                            }
+                            else
+                            {
+                                <div class="@SegmentCssClass(previous, segment)">@((MarkupString)Markdown.ToHtml(segment.Text, _markdownPipeline))</div>
+                            }
+                        }
                     }
                     else
                     {
@@ -218,6 +308,7 @@
 
 @code {
     private bool _showSettings;
+    private bool _showAgents;
     private bool _hasExistingConfig;
     private bool _isLoading;
     private bool _isThinking;
@@ -227,6 +318,7 @@
     private string? _errorMessage;
     private string? _incomingMessage;
     private string? _incomingReasoning;
+    private List<TranscriptSegment> _incomingTranscript = new();
     private IChatMessageBuilder? ctx;
     private CancellationTokenSource? _cancellationTokenSource;
     private Chat Chat { get; set; } = new() { Name = "MaIN Infer", ModelId = Utils.Model ?? "unknown" };
@@ -260,6 +352,7 @@
 
             // Settings initialization (requires JS interop, so must be in OnAfterRenderAsync)
             SettingsState.OnSettingsRequested += ShowSettingsFromGear;
+            AgentsPanelState.OnRequested += ShowAgents;
 
             if (Utils.NeedsConfiguration)
             {
@@ -483,6 +576,19 @@
         InvokeAsync(StateHasChanged);
     }
 
+    private void ShowAgents()
+    {
+        _showAgents = true;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleAgentSelected(Agent agent)
+    {
+        ActiveAgentState.Set(agent);
+        _showAgents = false;
+        StateHasChanged();
+    }
+
     private void HandleSettingsApplied()
     {
         _hasExistingConfig = true;
@@ -632,6 +738,12 @@
     {
         if (string.IsNullOrWhiteSpace(msg) && !_selectedFiles.Any() && !_selectedImages.Any())
         {
+            return;
+        }
+
+        if (ActiveAgentState.Current is not null)
+        {
+            await SendToAgentAsync(msg);
             return;
         }
 
@@ -793,9 +905,198 @@
         }
     }
 
+    // Mirrors SendAsync's streaming/loading/cancellation plumbing, but routes the turn through the
+    // selected agent (via the stateless AgentRunner) instead of the chat completion context.
+    private async Task SendToAgentAsync(string msg)
+    {
+        // Capture the active agent before any await so a mid-turn switch/exit can't race this send.
+        var agent = ActiveAgentState.Current;
+        if (agent is null || string.IsNullOrWhiteSpace(msg)) return;
+
+        _cancellationTokenSource?.Dispose();
+        _cancellationTokenSource = new CancellationTokenSource();
+        var cancellationToken = _cancellationTokenSource.Token;
+
+        _isLoading = true;
+        StateHasChanged();
+
+        // Agents don't take file attachments in this flow — drop any pending selection.
+        foreach (var f in _selectedFiles) f.StreamContent?.Dispose();
+        foreach (var i in _selectedImages) i.File.StreamContent?.Dispose();
+        _selectedFiles.Clear();
+        _selectedImages.Clear();
+        _inputKey++;
+
+        try
+        {
+            var newMsg = new Message
+            {
+                Role = "User",
+                Content = msg,
+                Type = GetMessageType()
+            };
+            Chat.Messages.Add(newMsg);
+            Messages.Add(new MessageExt { Message = newMsg });
+
+            bool wasAtBottom = await JS.InvokeAsync<bool>("scrollManager.isAtBottom", "messages-container");
+            StateHasChanged();
+            if (wasAtBottom)
+                await JS.InvokeVoidAsync("scrollManager.scrollToBottomSmooth", "messages-container");
+
+            // Stateless runner — hand it the full user/assistant conversation each call (agent supplies its own system).
+            var history = Chat.Messages
+                .Where(m => m.Role == "User" || m.Role == "Assistant")
+                .Select(m => new Message
+                {
+                    Role = m.Role,
+                    Content = m.Content,
+                    Type = m.Type,
+                    Time = m.Time
+                })
+                .ToList();
+
+            Func<LLMTokenValue, Task> onToken = async token =>
+            {
+                if (cancellationToken.IsCancellationRequested) return;
+
+                if (token.Type == TokenType.Reason)
+                {
+                    _incomingReasoning += token.Text;
+                    var lastReasoningSegment = _incomingTranscript.LastOrDefault();
+                    if (lastReasoningSegment is { IsReasoning: true })
+                    {
+                        lastReasoningSegment.Text += token.Text;
+                    }
+                    else
+                    {
+                        _incomingTranscript.Add(new TranscriptSegment { IsReasoning = true, Text = token.Text });
+                    }
+                    await InvokeAsync(StateHasChanged);
+                    if (wasAtBottom)
+                        await InvokeAsync(async () => await JS.InvokeVoidAsync("scrollManager.scrollToBottomSmooth", "messages-container"));
+                    return;
+                }
+
+                if (token.Type != TokenType.Message) return;
+                _incomingMessage += token.Text;
+                var lastSegment = _incomingTranscript.LastOrDefault();
+                if (lastSegment is { IsTool: false, IsReasoning: false })
+                {
+                    lastSegment.Text += token.Text;
+                }
+                else
+                {
+                    _incomingTranscript.Add(new TranscriptSegment { Text = token.Text });
+                }
+                await InvokeAsync(StateHasChanged);
+                if (wasAtBottom)
+                    await InvokeAsync(async () => await JS.InvokeVoidAsync("scrollManager.scrollToBottomSmooth", "messages-container"));
+            };
+
+            Func<ToolInvocation, Task> onTool = async invocation =>
+            {
+                if (cancellationToken.IsCancellationRequested) return;
+                var line = invocation.Done
+                    ? $"🔧 finished {invocation.ToolName}"
+                    : $"🔧 calling {invocation.ToolName}";
+                _incomingTranscript.Add(new TranscriptSegment { IsTool = true, Text = line });
+                await InvokeAsync(StateHasChanged);
+            };
+
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var result = await AgentRunner.RunAsync(agent.Id, history, onToken, onTool, cancellationToken);
+
+            var content = !string.IsNullOrEmpty(_incomingMessage) ? _incomingMessage! : result.Content;
+            var assistantMsg = new Message
+            {
+                Role = "Assistant",
+                Content = content,
+                Type = GetMessageType(),
+                Time = DateTime.Now
+            };
+            assistantMsg.Properties["AgentName"] = agent.Name;
+            if (_incomingTranscript.Count > 0)
+            {
+                if (string.IsNullOrEmpty(_incomingMessage))
+                {
+                    _incomingTranscript.Add(new TranscriptSegment { Text = content });
+                }
+                assistantMsg.Properties["AgentTranscript"] = JsonSerializer.Serialize(_incomingTranscript);
+            }
+            if (!string.IsNullOrWhiteSpace(_incomingReasoning))
+                assistantMsg.Tokens.Add(new LLMTokenValue { Text = _incomingReasoning, Type = TokenType.Reason });
+            Chat.Messages.Add(assistantMsg);
+
+            await JS.InvokeVoidAsync("scrollManager.saveScrollPosition", "messages-container");
+            _preserveScroll = true;
+            _incomingMessage = null;
+            _incomingReasoning = null;
+            _incomingTranscript = new();
+            RebuildMessagesWithFiles();
+        }
+        catch (OperationCanceledException)
+        {
+            if (!string.IsNullOrWhiteSpace(_incomingMessage))
+            {
+                var partialMsg = new Message
+                {
+                    Role = "Assistant",
+                    Content = _incomingMessage,
+                    Type = GetMessageType(),
+                    Time = DateTime.Now
+                };
+                partialMsg.Properties["AgentName"] = agent.Name;
+                if (_incomingTranscript.Count > 0)
+                    partialMsg.Properties["AgentTranscript"] = JsonSerializer.Serialize(_incomingTranscript);
+                if (!string.IsNullOrWhiteSpace(_incomingReasoning))
+                    partialMsg.Tokens.Add(new LLMTokenValue { Text = _incomingReasoning, Type = TokenType.Reason });
+                Chat.Messages.Add(partialMsg);
+                RebuildMessagesWithFiles();
+            }
+            else
+            {
+                if (Chat.Messages.Count > 0 && Chat.Messages.Last().Role == "User")
+                    Chat.Messages.RemoveAt(Chat.Messages.Count - 1);
+                if (Messages.Count > 0 && Messages.Last().Message.Role == "User")
+                    Messages.RemoveAt(Messages.Count - 1);
+            }
+
+            _incomingMessage = null;
+            _incomingReasoning = null;
+            _incomingTranscript = new();
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = ex is MaINCustomException maInException
+                ? maInException.PublicErrorMessage
+                : ex.Message;
+            _incomingMessage = null;
+            _incomingReasoning = null;
+            _incomingTranscript = new();
+            StateHasChanged();
+        }
+        finally
+        {
+            _isLoading = false;
+            _isThinking = false;
+            StateHasChanged();
+        }
+    }
+
     private void HandleInput(ChangeEventArgs obj)
     {
         // Handled by JS on send to ensure accuracy
+    }
+
+    // Adds breathing room at a segment kind boundary (thinking -> tool -> answer text) so the
+    // interleaved transcript doesn't read as one undifferentiated block of lines.
+    private static string SegmentCssClass(TranscriptSegment? previous, TranscriptSegment current)
+    {
+        var baseClass = current.IsReasoning ? "thinker" : current.IsTool ? "agent-activity" : string.Empty;
+        var kindChanged = previous is not null && (previous.IsTool != current.IsTool || previous.IsReasoning != current.IsReasoning);
+        return kindChanged ? $"{baseClass} segment-gap".Trim() : baseClass;
     }
 
     private string GetMessageContent(Message message)
@@ -823,6 +1124,27 @@
         conversation.ShowReason = !conversation.ShowReason;
     }
 
+    private async Task ToggleActivity(MessageExt conversation)
+    {
+        await JS.InvokeVoidAsync("scrollManager.saveScrollPosition", "messages-container");
+        _preserveScroll = true;
+        conversation.ShowActivity = !conversation.ShowActivity;
+    }
+
+    // Defensive: malformed/legacy AgentTranscript JSON must not break rendering of the whole conversation.
+    private static List<TranscriptSegment>? TryDeserializeTranscript(string? json)
+    {
+        if (string.IsNullOrEmpty(json)) return null;
+        try
+        {
+            return JsonSerializer.Deserialize<List<TranscriptSegment>>(json);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
     private void RebuildMessagesWithFiles()
     {
         var existingFilesMap = Messages
@@ -836,6 +1158,9 @@
         var existingReasonMap = Messages
             .ToDictionary(m => m.Message, m => m.ShowReason);
 
+        var existingActivityMap = Messages
+            .ToDictionary(m => m.Message, m => m.ShowActivity);
+
         Messages = Chat.Messages.Select(x => new MessageExt
         {
             Message = x,
@@ -844,7 +1169,12 @@
             ShowReason = existingReasonMap.TryGetValue(x, out var show) && show,
             HasReasoning = x.Tokens.Any(t => t.Type == TokenType.Reason),
             ComputedContent = GetMessageContent(x),
-            ComputedReasoning = GetReasoningContent(x)
+            ComputedReasoning = GetReasoningContent(x),
+            AgentName = x.Properties.TryGetValue("AgentName", out var n) ? n : null,
+            ShowActivity = existingActivityMap.TryGetValue(x, out var showAct) && showAct,
+            Transcript = x.Properties.TryGetValue("AgentTranscript", out var json)
+                ? TryDeserializeTranscript(json)
+                : null
         }).ToList();
     }
 
@@ -863,6 +1193,7 @@
     public void Dispose()
     {
         SettingsState.OnSettingsRequested -= ShowSettingsFromGear;
+        AgentsPanelState.OnRequested -= ShowAgents;
         _cancellationTokenSource?.Dispose();
         _dotNetRef?.Dispose();
     }

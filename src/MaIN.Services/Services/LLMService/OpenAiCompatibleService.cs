@@ -402,6 +402,26 @@ public abstract class OpenAiCompatibleService(
 
                     if (choice?.Delta is not null)
                     {
+                        // Handle reasoning (e.g. DeepSeek's reasoning_content) — surfaced separately from the answer.
+                        if (!string.IsNullOrEmpty(choice.Delta.ReasoningContent))
+                        {
+                            var reasonToken = new LLMTokenValue
+                            {
+                                Text = choice.Delta.ReasoningContent,
+                                Type = TokenType.Reason
+                            };
+                            tokens.Add(reasonToken);
+
+                            await InvokeTokenCallbackAsync(options.TokenCallback, reasonToken);
+
+                            if (options.InteractiveUpdates)
+                            {
+                                await _notificationService.DispatchNotification(
+                                    NotificationMessageBuilder.CreateChatCompletion(chat.Id, reasonToken, false),
+                                    ServiceConstants.Notifications.ReceiveMessageUpdate);
+                            }
+                        }
+
                         // Handle content
                         if (!string.IsNullOrEmpty(choice.Delta.Content))
                         {
@@ -1158,6 +1178,9 @@ file class Delta
 
     [JsonPropertyName("tool_calls")]
     public List<ToolCallChunk>? ToolCalls { get; set; }
+
+    [JsonPropertyName("reasoning_content")]
+    public string? ReasoningContent { get; set; } // e.g. DeepSeek's chain-of-thought delta
 }
 
 file class ToolCallChunk
