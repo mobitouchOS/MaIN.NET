@@ -18,6 +18,9 @@ public class BuiltInHostedToolsTests
     [InlineData("read_rss", "read_rss")]
     [InlineData("extract_url_metadata", "extract_url_metadata")]
     [InlineData("link_preview", "link_preview")]
+    [InlineData("calculator", "calculator")]
+    [InlineData("calc", "calc")]
+    [InlineData("evaluate_expression", "evaluate_expression")]
     public void TryResolveBuiltInTool_ResolvesKnownNamesAndTypes(string inputName, string expectedName)
     {
         var resolved = HostedToolsResolver.TryResolveBuiltInTool(inputName, null, out var tool);
@@ -82,13 +85,57 @@ public class BuiltInHostedToolsTests
 
     [Fact]
     [Trait("Category", "Unit")]
-    public void GetAllBuiltInTools_ReturnsAllSixBuiltInTools()
+    public void GetAllBuiltInTools_ReturnsAllSevenBuiltInTools()
     {
         var tools = HostedToolsResolver.GetAllBuiltInTools();
 
-        Assert.Equal(6, tools.Count);
+        Assert.Equal(7, tools.Count);
         Assert.All(tools, t => Assert.False(t.IsClientSide));
         Assert.All(tools, t => Assert.NotNull(t.Execute));
+    }
+
+    [Theory]
+    [Trait("Category", "Unit")]
+    [InlineData("3 + 4 * 2", 11)]
+    [InlineData("(3 + 4) * 2", 14)]
+    [InlineData("2 ^ 3 ^ 2", 512)] // right-associative: 2^(3^2)
+    [InlineData("-3 + 4", 1)]
+    [InlineData("10 % 3", 1)]
+    [InlineData("7 / 2", 3.5)]
+    public void CalculatorTool_EvaluatesExpressionsCorrectly(string expression, double expected)
+    {
+        Assert.Equal(expected, CalculatorTool.Evaluate(expression), precision: 10);
+    }
+
+    [Theory]
+    [Trait("Category", "Unit")]
+    [InlineData("1 / 0")]
+    [InlineData("(1 + 2")]
+    [InlineData("1 + ")]
+    [InlineData("1 & 2")]
+    public void CalculatorTool_ThrowsForInvalidExpressions(string expression)
+    {
+        Assert.ThrowsAny<Exception>(() => CalculatorTool.Evaluate(expression));
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CalculatorTool_ExecuteReturnsResultForValidExpression()
+    {
+        var tool = CalculatorTool.Create();
+        var result = await tool.Execute!.Invoke("""{"expression":"(3 + 4) * 2"}""");
+
+        Assert.Equal("14", result);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CalculatorTool_ExecuteReturnsErrorForDivisionByZero()
+    {
+        var tool = CalculatorTool.Create();
+        var result = await tool.Execute!.Invoke("""{"expression":"1 / 0"}""");
+
+        Assert.StartsWith("Error:", result);
     }
 
     [Fact]

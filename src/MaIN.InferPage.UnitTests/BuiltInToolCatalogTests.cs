@@ -7,17 +7,18 @@ namespace MaIN.InferPage.UnitTests;
 public class BuiltInToolCatalogTests
 {
     [Fact]
-    public void All_returns_the_six_resolvable_built_in_tools()
+    public void All_returns_the_seven_resolvable_built_in_tools()
     {
         var names = BuiltInToolCatalog.All.Select(t => t.Name).ToList();
 
-        Assert.Equal(6, names.Count);
+        Assert.Equal(7, names.Count);
         Assert.Contains("web_search", names);
         Assert.Contains("fetch_web_page", names);
         Assert.Contains("get_current_datetime", names);
         Assert.Contains("http_request", names);
         Assert.Contains("rss_feed_reader", names);
         Assert.Contains("extract_url_metadata", names);
+        Assert.Contains("calculator", names);
         Assert.DoesNotContain("search_documents", names);
     }
 
