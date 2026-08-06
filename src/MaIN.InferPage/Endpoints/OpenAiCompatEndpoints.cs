@@ -81,7 +81,7 @@ public static class OpenAiCompatEndpoints
     {
         _logger = app.Services.GetService<ILoggerFactory>()?.CreateLogger("MaIN.InferPage.Tools");
 
-        app.MapGet("/v1/models", async (HttpRequest request) =>
+        app.MapGet("/v1/models", async (HttpRequest request, AgentDefinitionService agentDefinitionService) =>
         {
             if (!IsAuthorized(request, out var authError))
             {
@@ -105,7 +105,7 @@ public static class OpenAiCompatEndpoints
             // model list; a fresh response object avoids mutating the shared cached instance.
             var data = new List<ModelData>(cached.Data);
             var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            foreach (var agent in await AIHub.Agent().GetAllAgents())
+            foreach (var agent in await agentDefinitionService.GetAllAsync())
             {
                 data.Add(new ModelData
                 {

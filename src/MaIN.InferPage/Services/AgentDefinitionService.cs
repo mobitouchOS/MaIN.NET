@@ -32,7 +32,22 @@ public sealed class AgentDefinitionService(IHttpClientFactory httpClientFactory,
 {
     private string? SearxngBaseUrl => configuration["MaIN:SearxngBaseUrl"];
 
-    public Task<List<Agent>> GetAllAsync() => AIHub.Agent().GetAllAgents();
+    // Invalidated on every Create/Update/Delete below -- avoids re-reading every agent's JSON file
+    // from disk on each call (e.g. /v1/models hits this on every request).
+    private volatile List<Agent>? _cachedAgents;
+
+    public async Task<List<Agent>> GetAllAsync()
+    {
+        var cached = _cachedAgents;
+        if (cached is not null)
+        {
+            return cached;
+        }
+
+        var agents = await AIHub.Agent().GetAllAgents();
+        _cachedAgents = agents;
+        return agents;
+    }
 
     public Task<Agent?> GetByIdAsync(string id) => AIHub.Agent().GetAgentById(id);
 
@@ -52,6 +67,7 @@ public sealed class AgentDefinitionService(IHttpClientFactory httpClientFactory,
         builder = ApplyMcpConfig(builder, request);
 
         var executor = await builder.CreateAsync();
+        _cachedAgents = null;
         return executor.GetAgent();
     }
 
@@ -83,6 +99,7 @@ public sealed class AgentDefinitionService(IHttpClientFactory httpClientFactory,
         builder = ApplyMcpConfig(builder, request);
 
         var executor = await builder.CreateAsync();
+        _cachedAgents = null;
         return executor.GetAgent();
     }
 
@@ -90,6 +107,7 @@ public sealed class AgentDefinitionService(IHttpClientFactory httpClientFactory,
     {
         var ctx = await AIHub.Agent().FromExisting(id);
         await ctx.Delete();
+        _cachedAgents = null;
     }
 
     // No MCP config => leave the agent's default Steps (["ANSWER"]) alone. Setting McpConfig without

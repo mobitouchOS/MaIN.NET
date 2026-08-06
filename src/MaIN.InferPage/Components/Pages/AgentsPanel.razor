@@ -176,6 +176,11 @@
             _error = "Name and model are required.";
             return;
         }
+        if (Utils.AllowMcpConfiguration && _mcpEnabled && string.IsNullOrWhiteSpace(_mcpCommand))
+        {
+            _error = "MCP is enabled but no command was entered. Fill in the command, or disable MCP for this agent.";
+            return;
+        }
         _busy = true;
         try
         {
