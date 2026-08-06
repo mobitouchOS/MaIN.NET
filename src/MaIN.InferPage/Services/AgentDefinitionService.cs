@@ -1,11 +1,14 @@
 using MaIN.Core.Hub;
 using MaIN.Core.Hub.Contexts.Interfaces.AgentContext;
 using MaIN.Core.Hub.Utils;
+using MaIN.Domain.Configuration;
 using MaIN.Domain.Entities;
 using MaIN.Domain.Entities.Agents;
 using MaIN.Domain.Entities.Tools;
 using MaIN.Domain.Exceptions.Agents;
 using MaIN.Domain.Models.Abstract;
+using MaIN.Domain.Repositories;
+using MaIN.Services.Constants;
 using MaIN.Services.Services.LLMService.Utils;
 
 namespace MaIN.InferPage.Services;
@@ -28,7 +31,11 @@ public sealed record CreateAgentRequest(
     IReadOnlyList<string> ToolNames,
     McpServerRequest? Mcp = null);
 
-public sealed class AgentDefinitionService(IHttpClientFactory httpClientFactory, IConfiguration configuration)
+public sealed class AgentDefinitionService(
+    IAgentRepository agentRepository,
+    IChatRepository chatRepository,
+    IHttpClientFactory httpClientFactory,
+    IConfiguration configuration)
 {
     private string? SearxngBaseUrl => configuration["MaIN:SearxngBaseUrl"];
 
@@ -73,34 +80,80 @@ public sealed class AgentDefinitionService(IHttpClientFactory httpClientFactory,
 
     public async Task<Agent> UpdateAsync(string id, CreateAgentRequest request)
     {
-        // Validate the model before deleting so a bad model id can't lose the agent. Note: delete+recreate is
-        // not atomic — a transient failure during the recreate below would lose the agent (acceptable for this admin panel).
         if (!ModelRegistry.Exists(request.ModelId))
         {
             throw new AgentModelNotAvailableException(id, request.ModelId);
         }
 
-        await DeleteAsync(id);
-
-        // Recreate with the same id (keeps agent:<id> refs + active-agent selection valid),
-        // rebuilding the agent's chat with the new prompt/tools.
-        var builder = AIHub.Agent()
-            .WithModel(request.ModelId)
-            .WithId(id)
-            .WithName(request.Name)
-            .WithInitialPrompt(request.SystemPrompt);
+        var agent = await agentRepository.GetAgentById(id) ?? throw new AgentNotFoundException(id);
 
         var toolsConfig = BuildToolsConfiguration(request.ToolNames);
-        if (toolsConfig is not null)
+        ApplyAgentUpdate(agent, request, toolsConfig);
+        await agentRepository.UpdateAgent(id, agent);
+
+        // Update the existing chat's model/tools/system message in place -- renaming or reconfiguring
+        // an agent must not touch its conversation history.
+        var chat = await chatRepository.GetChatById(agent.ChatId);
+        if (chat is not null)
         {
-            builder = builder.WithTools(toolsConfig);
+            chat.ModelId = agent.Model;
+            chat.ToolsConfiguration = toolsConfig;
+            chat.ImageGen = ModelRegistry.TryGetById(agent.Model, out var agentModel) && agentModel!.HasImageGeneration;
+
+            var backend = ModelRegistry.TryGetById(agent.Model, out var model) ? model!.Backend : BackendType.Self;
+            var systemMessageType = backend != BackendType.Self ? MessageType.CloudLLM : MessageType.LocalLLM;
+            var systemMessage = chat.Messages.FirstOrDefault(m =>
+                m.Role.Equals(ServiceConstants.Roles.System, StringComparison.OrdinalIgnoreCase));
+            if (systemMessage is not null)
+            {
+                systemMessage.Content = request.SystemPrompt;
+                systemMessage.Type = systemMessageType;
+            }
+            else
+            {
+                chat.Messages.Insert(0, new Message
+                {
+                    Role = "System",
+                    Content = request.SystemPrompt,
+                    Type = systemMessageType
+                });
+            }
+
+            await chatRepository.UpdateChat(chat.Id, chat);
         }
 
-        builder = ApplyMcpConfig(builder, request);
-
-        var executor = await builder.CreateAsync();
         _cachedAgents = null;
-        return executor.GetAgent();
+        return agent;
+    }
+
+    // Mirrors ApplyMcpConfig's create-time behavior, but update must also handle turning MCP *off*:
+    // an agent previously configured with Steps=["MCP"] has to fall back to ["ANSWER"] or it's left
+    // calling the MCP step handler with no McpConfig.
+    private static void ApplyAgentUpdate(Agent agent, CreateAgentRequest request, ToolsConfiguration? toolsConfig)
+    {
+        agent.Name = request.Name;
+        agent.Model = request.ModelId;
+        agent.Config.Instruction = request.SystemPrompt;
+        agent.ToolsConfiguration = toolsConfig;
+
+        if (request.Mcp is null)
+        {
+            agent.Config.McpConfig = null;
+            agent.Config.Steps = StepBuilder.Instance.Answer().Build();
+            return;
+        }
+
+        agent.Config.McpConfig = new Mcp
+        {
+            Name = request.Mcp.Name,
+            Command = request.Mcp.Command,
+            Arguments = request.Mcp.Arguments.ToList(),
+            EnvironmentVariables = request.Mcp.EnvironmentVariables.ToDictionary(kv => kv.Key, kv => kv.Value),
+            Model = request.ModelId,
+            // Mirrors AgentContext.WithMcpConfig, which stamps this from the agent's model backend.
+            Backend = ModelRegistry.GetById(request.ModelId).Backend
+        };
+        agent.Config.Steps = StepBuilder.Instance.Mcp().Build();
     }
 
     public async Task DeleteAsync(string id)

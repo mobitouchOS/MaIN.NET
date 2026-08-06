@@ -1018,7 +1018,10 @@
             assistantMsg.Properties["AgentName"] = agent.Name;
             if (_incomingTranscript.Count > 0)
             {
-                _incomingTranscript.Add(new TranscriptSegment { Text = content });
+                if (string.IsNullOrEmpty(_incomingMessage))
+                {
+                    _incomingTranscript.Add(new TranscriptSegment { Text = content });
+                }
                 assistantMsg.Properties["AgentTranscript"] = JsonSerializer.Serialize(_incomingTranscript);
             }
             if (!string.IsNullOrWhiteSpace(_incomingReasoning))
