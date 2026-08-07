@@ -945,7 +945,8 @@
 
             // Stateless runner — hand it the full user/assistant conversation each call (agent supplies its own system).
             var history = Chat.Messages
-                .Where(m => m.Role == "User" || m.Role == "Assistant")
+                .Where(m => m.Role.Equals("User", StringComparison.OrdinalIgnoreCase)
+                    || m.Role.Equals("Assistant", StringComparison.OrdinalIgnoreCase))
                 .Select(m => new Message
                 {
                     Role = m.Role,

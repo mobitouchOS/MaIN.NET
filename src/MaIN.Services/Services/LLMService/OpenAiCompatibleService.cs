@@ -134,6 +134,7 @@ public abstract class OpenAiCompatibleService(
                 chat,
                 conversation,
                 apiKey,
+                tokens,
                 resultBuilder,
                 options,
                 cancellationToken);
@@ -202,6 +203,7 @@ public abstract class OpenAiCompatibleService(
                     chat,
                     conversation,
                     apiKey,
+                    tokens,
                     resultBuilder,
                     options,
                     cancellationToken);
@@ -505,6 +507,7 @@ public abstract class OpenAiCompatibleService(
         Chat chat,
         List<ChatMessage> conversation,
         string apiKey,
+        List<LLMTokenValue> tokens,
         StringBuilder resultBuilder,
         ChatRequestOptions options,
         CancellationToken cancellationToken)
@@ -529,6 +532,11 @@ public abstract class OpenAiCompatibleService(
             responseJson, DefaultJsonSerializerOptions);
 
         var message = chatResponse?.Choices?.FirstOrDefault()?.Message;
+
+        if (!string.IsNullOrEmpty(message?.ReasoningContent))
+        {
+            tokens.Add(new LLMTokenValue { Text = message.ReasoningContent, Type = TokenType.Reason });
+        }
 
         if (message?.Content is not null)
         {
@@ -616,7 +624,7 @@ public abstract class OpenAiCompatibleService(
             }
             else
             {
-                await ProcessNonStreamingChatAsync(chat, conversation, GetApiKey(), resultBuilder, requestOptions, cancellationToken);
+                await ProcessNonStreamingChatAsync(chat, conversation, GetApiKey(), tokens, resultBuilder, requestOptions, cancellationToken);
             }
 
             var finalToken = new LLMTokenValue { Text = resultBuilder.ToString(), Type = TokenType.FullAnswer };
@@ -990,6 +998,7 @@ public abstract class OpenAiCompatibleService(
         Chat chat,
         List<ChatMessage> conversation,
         string apiKey,
+        List<LLMTokenValue> tokens,
         StringBuilder resultBuilder,
         ChatRequestOptions options,
         CancellationToken cancellationToken)
@@ -1012,11 +1021,16 @@ public abstract class OpenAiCompatibleService(
         var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
         var chatResponse =
             JsonSerializer.Deserialize<ChatCompletionResponse>(responseJson, DefaultJsonSerializerOptions);
-        var responseContent = chatResponse?.Choices?.FirstOrDefault()?.Message?.Content;
+        var message = chatResponse?.Choices?.FirstOrDefault()?.Message;
 
-        if (responseContent is not null)
+        if (!string.IsNullOrEmpty(message?.ReasoningContent))
         {
-            resultBuilder.Append(responseContent);
+            tokens.Add(new LLMTokenValue { Text = message.ReasoningContent, Type = TokenType.Reason });
+        }
+
+        if (message?.Content is not null)
+        {
+            resultBuilder.Append(message.Content);
         }
     }
 
@@ -1160,6 +1174,9 @@ file class ChatMessageResponse
 
     [JsonPropertyName("tool_calls")]
     public List<ToolCall>? ToolCalls { get; set; }
+
+    [JsonPropertyName("reasoning_content")]
+    public string? ReasoningContent { get; set; } // e.g. DeepSeek's chain-of-thought, non-streaming responses
 }
 
 file class ChatCompletionChunk

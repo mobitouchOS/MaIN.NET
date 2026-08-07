@@ -16,7 +16,6 @@ public static class AgentToolsRehydrator
 
         foreach (var tool in tools)
         {
-            // IsClientSide is also [JsonIgnore] (lost on load), so matching is by name only — bounded edge case.
             if (tool.Execute is not null)
             {
                 continue;
@@ -32,6 +31,7 @@ public static class AgentToolsRehydrator
                 && live is not null)
             {
                 tool.Execute = live.Execute;
+                tool.IsClientSide = live.IsClientSide;
             }
         }
     }

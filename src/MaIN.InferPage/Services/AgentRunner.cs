@@ -37,6 +37,14 @@ public sealed class AgentRunner(
         Func<ToolInvocation, Task>? toolCallback = null,
         CancellationToken ct = default)
     {
+        var agent = await agentService.GetAgentById(agentId);
+        if (!Utils.AllowMcpConfiguration && agent?.Config?.McpConfig is not null)
+        {
+            // MCP spawns unsandboxed OS processes. The configurator UI hides the option when disabled,
+            // but an agent persisted while it was enabled (or written directly via the API) must still be blocked here.
+            throw new InvalidOperationException("MCP configuration is disabled on this server.");
+        }
+
         var persisted = await agentService.GetChatByAgent(agentId);
         var chat = CloneTransient(persisted);
         AgentToolsRehydrator.Rehydrate(chat, httpClientFactory, SearxngBaseUrl);
