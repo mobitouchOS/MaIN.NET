@@ -86,3 +86,18 @@
     .agents-panel { width: 95vw; min-width: 0; }
     .agents-layout { grid-template-columns: 1fr; }
 }
+
+.mcp-picker-row { display: flex; gap: 0.5rem; align-items: center; }
+.mcp-new-server-form { display: flex; flex-direction: column; gap: 0.5rem; }
+.mcp-catalog-list {
+    display: flex; flex-direction: column; gap: 0.4rem;
+    border: 1px solid var(--neutral-stroke-rest); border-radius: 8px;
+    padding: 0.5rem 0.75rem; margin-top: 0.25rem;
+}
+.mcp-catalog-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+}
+.mcp-catalog-edit-form {
+    display: flex; flex-direction: column; gap: 0.4rem;
+    border: 1px solid var(--accent-base-color); border-radius: 6px; padding: 0.5rem;
+}

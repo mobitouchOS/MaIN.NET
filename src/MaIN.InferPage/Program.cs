@@ -54,6 +54,12 @@ builder.Services.AddOpenApi();
 builder.Services.AddSingleton<ApiLogService>();
 builder.Services.AddSingleton<AgentDefinitionService>();
 builder.Services.AddSingleton<AgentRunner>();
+builder.Services.AddSingleton(sp =>
+{
+    var config = sp.GetRequiredService<IConfiguration>();
+    var basePath = config["MaIN:FileSystemSettings:Path"] ?? "Data";
+    return new McpServerCatalogService(basePath);
+});
 
 if (!builder.Environment.IsDevelopment())
 {

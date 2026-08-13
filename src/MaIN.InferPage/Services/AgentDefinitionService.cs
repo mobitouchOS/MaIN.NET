@@ -22,7 +22,9 @@ public sealed record McpServerRequest(
     string Name,
     string Command,
     IReadOnlyList<string> Arguments,
-    IReadOnlyDictionary<string, string> EnvironmentVariables);
+    IReadOnlyDictionary<string, string> EnvironmentVariables,
+    string? CatalogServerId = null,
+    string? CatalogServerName = null);
 
 public sealed record CreateAgentRequest(
     string Name,
@@ -150,6 +152,7 @@ public sealed class AgentDefinitionService(
             Arguments = request.Mcp.Arguments.ToList(),
             EnvironmentVariables = request.Mcp.EnvironmentVariables.ToDictionary(kv => kv.Key, kv => kv.Value),
             Model = request.ModelId,
+            Properties = McpProvenance.BuildProperties(request.Mcp.CatalogServerId, request.Mcp.CatalogServerName),
             // Mirrors AgentContext.WithMcpConfig, which stamps this from the agent's model backend.
             Backend = ModelRegistry.GetById(request.ModelId).Backend
         };
@@ -179,7 +182,8 @@ public sealed class AgentDefinitionService(
                 Command = request.Mcp.Command,
                 Arguments = request.Mcp.Arguments.ToList(),
                 EnvironmentVariables = request.Mcp.EnvironmentVariables.ToDictionary(kv => kv.Key, kv => kv.Value),
-                Model = request.ModelId // McpService sends this as the OpenAI "model" field — empty means a 400.
+                Model = request.ModelId, // McpService sends this as the OpenAI "model" field — empty means a 400.
+                Properties = McpProvenance.BuildProperties(request.Mcp.CatalogServerId, request.Mcp.CatalogServerName)
             })
             // MCP already calls the model, runs tools, and synthesizes the final reply. A trailing "ANSWER"
             // step re-runs a tool-less chat completion afterward, and StepHandlerExtensions.EnsureUserMessageReadiness
