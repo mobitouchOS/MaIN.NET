@@ -37,25 +37,12 @@
 
             <div class="settings-field">
                 <label class="settings-label">Model</label>
-                @if (_selectedBackend?.BackendType == BackendType.Self)
-                {
-                    <FluentAutocomplete TOption="LocalModel"
-                                        OptionText="@(m => FormatLocalModelName(m))"
-                                        SelectedOptions="@_selectedLocalModels"
-                                        SelectedOptionsChanged="@OnLocalModelSelected"
-                                        OnOptionsSearch="@SearchLocalModels"
-                                        MaximumSelectedOptions="1"
-                                        MaximumOptionsSearch="@_chatLocalModels.Length"
-                                        Placeholder="Search and select a model..."
-                                        Style="width:100%;" />
-                }
-                else
-                {
-                    <FluentTextField @bind-Value="_modelName"
-                                     @bind-Value:after="OnModelNameChanged"
-                                     Placeholder="e.g., gpt-4o, gemma3-4b"
-                                     Style="width: 100%;" />
-                }
+                <ModelPicker Models="@ModelSuggestions"
+                             @bind-Value="_modelName"
+                             @bind-Value:after="OnModelNameChanged"
+                             Placeholder="@(_selectedBackend?.BackendType == BackendType.Self
+                                 ? "Search or type a model id..."
+                                 : "e.g., gpt-4o, gemma3-4b")" />
             </div>
 
             @if (RequiresApiKey)
@@ -288,7 +275,15 @@
         .OrderBy(m => m.Name)
         .ToArray();
 
-    private IEnumerable<LocalModel> _selectedLocalModels = [];
+    // Built-in models for the current backend (custom ids stay out of the list).
+    private IEnumerable<AIModel> ModelSuggestions =>
+        _selectedBackend?.BackendType == BackendType.Self
+            ? _chatLocalModels.Where(Utils.IsBuiltInModel)
+            : _selectedBackend is null
+                ? []
+                : ModelRegistry.GetAllCloud()
+                    .Where(m => m.Backend == _selectedBackend.BackendType && Utils.IsBuiltInModel(m))
+                    .OrderBy(m => m.Name);
 
     private List<BackendOption> _backendOptions = null!;
     private BackendOption? _selectedBackend;
@@ -467,7 +462,6 @@
                 _vertexLocation = settings.VertexLocation;
             }
 
-            SyncLocalModelSelection();
             OnModelNameChanged();
         }
         else if (!Utils.NeedsConfiguration)
@@ -484,7 +478,6 @@
             _modelName = Utils.Model;
             _modelPath = Utils.Path;
 
-            SyncLocalModelSelection();
             OnModelNameChanged();
         }
 
@@ -509,7 +502,6 @@
         if (profile != null)
         {
             _modelName = profile.Model;
-            SyncLocalModelSelection();
             OnModelNameChanged();                    // sets _isRegisteredModel + auto-detects caps
             if (!_isRegisteredModel)                // only restore manual caps for unregistered models
             {
@@ -526,13 +518,11 @@
             if (!string.IsNullOrEmpty(lastModel))
             {
                 _modelName = lastModel;
-                SyncLocalModelSelection();
                 OnModelNameChanged();
             }
             else
             {
                 _modelName = null;
-                SyncLocalModelSelection();
             }
         }
 
@@ -558,44 +548,6 @@
 
         await LoadApiKeyPreview();
         _apiKeyInput = null;
-    }
-
-    private void OnLocalModelSelected(IEnumerable<LocalModel> selected)
-    {
-        _selectedLocalModels = selected;
-        _modelName = selected.FirstOrDefault()?.Id;
-        OnModelNameChanged();
-    }
-
-    private void SearchLocalModels(OptionsSearchEventArgs<LocalModel> e)
-    {
-        e.Items = string.IsNullOrEmpty(e.Text)
-            ? _chatLocalModels
-            : _chatLocalModels.Where(m =>
-                m.Name.Contains(e.Text, StringComparison.OrdinalIgnoreCase) ||
-                m.Id.Contains(e.Text, StringComparison.OrdinalIgnoreCase));
-    }
-
-    private static string FormatLocalModelName(LocalModel m)
-    {
-        var caps = new List<string>();
-        if (m is IVisionModel) caps.Add("Vision");
-        if (m is IReasoningModel) caps.Add("Reasoning");
-        if (m is IImageGenerationModel) caps.Add("Image Gen");
-        return caps.Count > 0 ? $"{m.Name}  [{string.Join(", ", caps)}]" : m.Name;
-    }
-
-    private void SyncLocalModelSelection()
-    {
-        if (_selectedBackend?.BackendType == BackendType.Self && !string.IsNullOrEmpty(_modelName))
-        {
-            var match = _chatLocalModels.FirstOrDefault(m => m.Id == _modelName);
-            _selectedLocalModels = match != null ? [match] : [];
-        }
-        else
-        {
-            _selectedLocalModels = [];
-        }
     }
 
     private void OnModelNameChanged()

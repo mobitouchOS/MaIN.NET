@@ -93,33 +93,9 @@
                                   @bind-SelectedOption:after="OnBackendChanged"
                                   Style="width: 100%;" />
                     <label>Model</label>
-                    @if (_customModelMode)
-                    {
-                        <FluentTextField @bind-Value="_customModelId" Placeholder="e.g., gpt-4o, gemma3-4b" Style="width: 100%;" />
-                    }
-                    else if (_selectedBackend?.BackendType == BackendType.Self)
-                    {
-                        <FluentAutocomplete TOption="LocalModel"
-                                            OptionText="@(m => m.Name)"
-                                            SelectedOptions="@_selectedLocalModels"
-                                            SelectedOptionsChanged="@OnLocalModelSelected"
-                                            OnOptionsSearch="@SearchLocalModels"
-                                            MaximumSelectedOptions="1"
-                                            MaximumOptionsSearch="@_localModels.Length"
-                                            Placeholder="Search local models..."
-                                            Style="width:100%;" />
-                    }
-                    else
-                    {
-                        <FluentSelect TOption="AIModel"
-                                      Items="@CloudModelsForSelectedBackend"
-                                      OptionValue="@(m => m.Id)"
-                                      OptionText="@(m => m.Name)"
-                                      @bind-SelectedOption="_selectedCloudModel"
-                                      Placeholder="Choose a model..."
-                                      Style="width: 100%;" />
-                    }
-                    <FluentCheckbox @bind-Value="_customModelMode">Custom model ID</FluentCheckbox>
+                    <ModelPicker Models="@AgentModelSuggestions"
+                                 @bind-Value="_modelId"
+                                 Placeholder="Search or type a model id..." />
                     <label>System prompt</label>
                     <FluentTextArea @bind-Value="_systemPrompt" Rows="5" Placeholder="You are a helpful assistant..." Style="width: 100%;" />
                     <label>Built-in tools</label>
@@ -266,21 +242,17 @@
     // Backend + model selection
     private List<BackendOption> _backendOptions = BackendOptions.All;
     private BackendOption? _selectedBackend;
-    private IEnumerable<LocalModel> _selectedLocalModels = [];
-    private AIModel? _selectedCloudModel;
-    private bool _customModelMode;
-    private string _customModelId = string.Empty;
+    private string _modelId = string.Empty;
     private static readonly LocalModel[] _localModels = ModelRegistry.GetAllLocal().OrderBy(m => m.Name).ToArray();
 
-    private string ModelId =>
-        _customModelMode ? _customModelId.Trim()
-        : _selectedBackend?.BackendType == BackendType.Self ? (_selectedLocalModels.FirstOrDefault()?.Id ?? string.Empty)
-        : _selectedCloudModel?.Id ?? string.Empty;
-
-    private IEnumerable<AIModel> CloudModelsForSelectedBackend =>
-        _selectedBackend is null
-            ? []
-            : ModelRegistry.GetAllCloud().Where(m => m.Backend == _selectedBackend.BackendType).OrderBy(m => m.Name);
+    private IEnumerable<AIModel> AgentModelSuggestions =>
+        _selectedBackend?.BackendType == BackendType.Self
+            ? _localModels.Where(Utils.IsBuiltInModel)
+            : _selectedBackend is null
+                ? []
+                : ModelRegistry.GetAllCloud()
+                    .Where(m => m.Backend == _selectedBackend.BackendType && Utils.IsBuiltInModel(m))
+                    .OrderBy(m => m.Name);
 
     // MCP catalog
     private List<McpServerCatalogEntry> _mcpServers = [];
@@ -305,6 +277,8 @@
 
     protected override async Task OnInitializedAsync()
     {
+        // Default to Local so the model list is populated on first render.
+        _selectedBackend ??= _backendOptions.FirstOrDefault(o => o.BackendType == BackendType.Self);
         await ReloadAgents();
         await ReloadMcpServers();
     }
@@ -327,27 +301,12 @@
         _mcpServers = await McpCatalog.GetAllAsync();
     }
 
-    private void OnBackendChanged()
-    {
-        _selectedLocalModels = [];
-        _selectedCloudModel = null;
-    }
-
-    private void OnLocalModelSelected(IEnumerable<LocalModel> selected) => _selectedLocalModels = selected;
-
-    private void SearchLocalModels(OptionsSearchEventArgs<LocalModel> e)
-    {
-        e.Items = string.IsNullOrEmpty(e.Text)
-            ? _localModels
-            : _localModels.Where(m =>
-                m.Name.Contains(e.Text, StringComparison.OrdinalIgnoreCase) ||
-                m.Id.Contains(e.Text, StringComparison.OrdinalIgnoreCase));
-    }
+    private void OnBackendChanged() => _modelId = string.Empty;
 
     private async Task SaveAgent()
     {
         _error = string.Empty;
-        if (string.IsNullOrWhiteSpace(_name) || string.IsNullOrWhiteSpace(ModelId))
+        if (string.IsNullOrWhiteSpace(_name) || string.IsNullOrWhiteSpace(_modelId))
         {
             _error = "Name and model are required.";
             return;
@@ -364,7 +323,7 @@
         try
         {
             var toolNames = _toolChoices.Where(t => t.Selected).Select(t => t.Name).ToList();
-            var request = new CreateAgentRequest(_name.Trim(), ModelId, _systemPrompt, toolNames, mcpRequest);
+            var request = new CreateAgentRequest(_name.Trim(), _modelId.Trim(), _systemPrompt, toolNames, mcpRequest);
             var editingId = _editingId;
 
             var savedAgent = editingId is null
@@ -504,29 +463,10 @@
     // this only affects the pre-selected UI state, not the saved Model id itself.
     private void SetModelSelectionFor(string modelId)
     {
-        if (ModelRegistry.TryGetById(modelId, out var model) && model is not null)
-        {
-            _customModelMode = false;
-            _selectedBackend = _backendOptions.FirstOrDefault(o => o.BackendType == model.Backend);
-            if (model is LocalModel localModel)
-            {
-                _selectedLocalModels = [localModel];
-                _selectedCloudModel = null;
-            }
-            else
-            {
-                _selectedCloudModel = model;
-                _selectedLocalModels = [];
-            }
-        }
-        else
-        {
-            _customModelMode = true;
-            _customModelId = modelId;
-            _selectedBackend = _backendOptions.FirstOrDefault(o => o.BackendType == BackendType.Self);
-            _selectedLocalModels = [];
-            _selectedCloudModel = null;
-        }
+        _modelId = modelId;
+        _selectedBackend = ModelRegistry.TryGetById(modelId, out var model) && model is not null
+            ? _backendOptions.FirstOrDefault(o => o.BackendType == model.Backend)
+            : _backendOptions.FirstOrDefault(o => o.BackendType == BackendType.Self);
     }
 
     private void CancelEdit() => ResetForm();
@@ -538,11 +478,8 @@
         _systemPrompt = "You are a helpful assistant.";
         foreach (var t in _toolChoices) t.Selected = false;
 
-        _selectedBackend = null;
-        _selectedLocalModels = [];
-        _selectedCloudModel = null;
-        _customModelMode = false;
-        _customModelId = string.Empty;
+        _selectedBackend = _backendOptions.FirstOrDefault(o => o.BackendType == BackendType.Self);
+        _modelId = string.Empty;
 
         _mcpEnabled = false;
         _selectedServer = null;

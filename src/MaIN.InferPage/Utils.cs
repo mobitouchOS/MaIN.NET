@@ -25,6 +25,10 @@ public static class Utils
 
     public static string DefaultModelsPath => System.IO.Path.Combine(Directory.GetCurrentDirectory(), "models");
 
+    // False for runtime-registered custom ids (always Generic* types).
+    public static bool IsBuiltInModel(AIModel model) =>
+        !model.GetType().Name.StartsWith("Generic", StringComparison.Ordinal);
+
     /// <summary>
     /// Turns an arbitrary model name (used as a registry id when paired with modelUrl)
     /// into a safe .gguf filename for the models directory.
