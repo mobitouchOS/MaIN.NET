@@ -1,4 +1,5 @@
 using MaIN.Core;
+using MaIN.Domain.Repositories;
 using MaIN.InferPage.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -27,7 +28,11 @@ public class AgentUpdateTests
         await using var sp = services.BuildServiceProvider();
         sp.UseMaIN();
 
-        var svc = new AgentDefinitionService(sp.GetRequiredService<IHttpClientFactory>(), config);
+        var svc = new AgentDefinitionService(
+            sp.GetRequiredService<IAgentRepository>(),
+            sp.GetRequiredService<IChatRepository>(),
+            sp.GetRequiredService<IHttpClientFactory>(),
+            config);
 
         try
         {
