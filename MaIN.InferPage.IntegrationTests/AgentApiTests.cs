@@ -82,8 +82,8 @@ public class AgentApiTests : InferPageEndpointTestBase
         var chat = await ctx.GetChat();
         var contents = chat.Messages.Select(m => m.Content).ToList();
 
-        Assert.Contains(contents, c => c.Contains("Second turn message"));
         Assert.DoesNotContain(contents, c => c.Contains("First turn message"));
+        Assert.DoesNotContain(contents, c => c.Contains("Second turn message"));
     }
 
     [Fact]
