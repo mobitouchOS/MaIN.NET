@@ -469,7 +469,7 @@ public class LLMService : ILLMService
         
         var tokens = isNewConversation
             ? executor.Context.Tokenize(templatedMessage, addBos: true, special: true)
-            : executor.Context.Tokenize(templatedMessage);
+            : executor.Context.Tokenize(templatedMessage, special: true);
 
         conversation.Prompt(tokens);
     }

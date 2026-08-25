@@ -1,0 +1,155 @@
+@using MaIN.Domain.Configuration
+@using MaIN.Domain.Models.Abstract
+@using MaIN.Core.Hub
+@using MaIN.Core.Hub.Contexts
+@using MaIN.Infrastructure.Models
+@inject MaINSettings MaINSettings
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@implements IDisposable
+
+@if (_dlModel is not null)
+{
+    <div class="settings-field">
+        <label class="settings-label">Download</label>
+        @if (_isDownloading)
+        {
+            <div style="display:flex;flex-direction:column;gap:6px;">
+                @if (_downloadProgress?.Percentage is { } pct)
+                {
+                    <FluentProgress Value="@((int)pct)" Max="100" Style="width:100%;" />
+                    <span class="api-key-hint">
+                        @($"{pct:F1}%  ·  {FormatBytes(_downloadProgress.Value.BytesRead)}")
+                        @if (_downloadProgress.Value.TotalBytes is { } total) { @($" / {FormatBytes(total)}") }
+                        @($"  ·  {FormatSpeed(_downloadProgress.Value.BytesPerSecond)}")
+                        @if (_downloadProgress?.Eta is { } eta) { @($"  ·  ETA {eta:mm\\:ss}") }
+                    </span>
+                }
+                else
+                {
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <FluentProgressRing Style="width:20px;height:20px;" />
+                        <span class="api-key-hint">Connecting...</span>
+                    </div>
+                }
+            </div>
+        }
+        else if (_isModelDownloaded)
+        {
+            <FluentBadge BackgroundColor="#16a34a" Color="#fff">Downloaded</FluentBadge>
+        }
+        else
+        {
+            <div style="display:flex;flex-direction:column;gap:4px;">
+                <FluentButton Appearance="Appearance.Accent" OnClick="@DownloadModelAsync">
+                    Download
+                </FluentButton>
+                @if (_downloadError != null)
+                {
+                    <span class="api-key-hint" style="color:var(--error);">@_downloadError</span>
+                }
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public string? ModelId { get; set; }
+    [Parameter] public string? PathOverride { get; set; }
+
+    private LocalModel? _dlModel;
+    private bool _isModelDownloaded;
+    private bool _isDownloading;
+    private string? _downloadError;
+    private CancellationTokenSource? _downloadCts;
+    private DownloadProgress? _downloadProgress;
+    private bool _disposed;
+
+    protected override void OnParametersSet()
+    {
+        _downloadError = null;
+
+        if (!string.IsNullOrWhiteSpace(ModelId)
+            && ModelRegistry.TryGetById(ModelId, out var model)
+            && model is LocalModel { DownloadUrl: not null } localModel)
+        {
+            _dlModel = localModel;
+            _isModelDownloaded = localModel.IsDownloaded(GetEffectiveBasePath());
+        }
+        else
+        {
+            _dlModel = null;
+            _isModelDownloaded = false;
+        }
+    }
+
+    private string GetEffectiveBasePath()
+    {
+        var raw = PathOverride?.Trim() ?? "";
+        if (!string.IsNullOrEmpty(raw))
+        {
+            return raw.EndsWith(".gguf", StringComparison.OrdinalIgnoreCase)
+                ? (Path.GetDirectoryName(raw) ?? "")
+                : raw;
+        }
+        return MaINSettings.ModelsPath
+            ?? Environment.GetEnvironmentVariable("MaIN_ModelsPath")
+            ?? Utils.DefaultModelsPath;
+    }
+
+    private async Task DownloadModelAsync()
+    {
+        _isDownloading = true;
+        _downloadError = null;
+        _downloadProgress = null;
+        _downloadCts = new CancellationTokenSource();
+        StateHasChanged();
+        try
+        {
+            var basePath = GetEffectiveBasePath();
+            Directory.CreateDirectory(basePath);
+            Environment.SetEnvironmentVariable("MaIN_ModelsPath", basePath);
+            MaINSettings.ModelsPath = basePath;
+            var progress = new Progress<DownloadProgress>(p =>
+            {
+                _downloadProgress = p;
+                if (!_disposed)
+                {
+                    _ = InvokeAsync(StateHasChanged);
+                }
+            });
+            await AIHub.Model().EnsureDownloadedAsync(ModelId!, progress, _downloadCts.Token);
+            _isModelDownloaded = true;
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            _downloadError = ex.Message;
+        }
+        finally
+        {
+            _isDownloading = false;
+            _downloadCts = null;
+            if (!_disposed)
+            {
+                StateHasChanged();
+            }
+        }
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+        _downloadCts?.Cancel();
+        _downloadCts?.Dispose();
+    }
+
+    private static string FormatBytes(long bytes) => bytes switch
+    {
+        >= 1024L * 1024 * 1024 => $"{bytes / (1024.0 * 1024 * 1024):F1} GB",
+        >= 1024 * 1024          => $"{bytes / (1024.0 * 1024):F1} MB",
+        >= 1024                 => $"{bytes / 1024.0:F1} KB",
+        _                       => $"{bytes} B"
+    };
+
+    private static string FormatSpeed(double bytesPerSecond) => $"{FormatBytes((long)bytesPerSecond)}/s";
+}

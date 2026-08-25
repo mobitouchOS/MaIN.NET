@@ -1,0 +1,320 @@
+@using MaIN.Domain.Models.Abstract
+@using Microsoft.AspNetCore.Components.Web
+
+@* Inline styles (dodge app.css caching); !important beats reboot.css's input border. *@
+<style>
+    .model-picker-wrap {
+        position: relative;
+        width: 100%;
+    }
+
+    .model-picker {
+        width: 100%;
+        box-sizing: border-box;
+        height: 32px;
+        padding: 0 10px;
+        font-family: var(--body-font, "Segoe UI Variable", "Segoe UI", sans-serif);
+        font-size: var(--type-ramp-base-font-size, 14px);
+        color: var(--neutral-foreground-rest, inherit);
+        background: var(--neutral-fill-input-rest, #ffffff);
+        border: 1px solid rgba(128, 128, 128, 0.4) !important;
+        border-radius: calc(var(--control-corner-radius, 4) * 1px);
+        outline: none;
+        transition: box-shadow 0.1s ease-in-out;
+    }
+
+    body[data-theme="dark"] .model-picker,
+    body[data-theme="system-dark"] .model-picker {
+        border-color: rgba(255, 255, 255, 0.2) !important;
+    }
+
+    .model-picker:hover {
+        border-color: var(--accent-base-color, #808080) !important;
+    }
+
+    .model-picker:focus,
+    .model-picker:focus-visible {
+        border-color: var(--accent-base-color, #808080) !important;
+        box-shadow: 0 0 0 1px var(--accent-base-color, #808080);
+    }
+
+    .model-picker::placeholder {
+        color: var(--neutral-foreground-hint, #888888);
+    }
+
+    /* Registered pick shown as a chip. */
+    .model-picker-field {
+        display: flex;
+        align-items: center;
+        width: 100%;
+        min-height: 32px;
+        box-sizing: border-box;
+        padding: 0 8px;
+        background: var(--neutral-fill-input-rest, #ffffff);
+        border: 1px solid rgba(128, 128, 128, 0.4);
+        border-radius: calc(var(--control-corner-radius, 4) * 1px);
+        cursor: text;
+    }
+
+    body[data-theme="dark"] .model-picker-field,
+    body[data-theme="system-dark"] .model-picker-field {
+        border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .model-picker-field:hover {
+        border-color: var(--accent-base-color, #808080);
+    }
+
+    .model-picker-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        max-width: 100%;
+        padding: 2px 4px 2px 10px;
+        background: var(--neutral-layer-3, #e0e0e0);
+        border: 1px solid rgba(128, 128, 128, 0.35);
+        border-radius: 12px;
+        font-size: 13px;
+        line-height: 1.5;
+        color: var(--neutral-foreground-rest, inherit);
+    }
+
+    .model-picker-chip .mp-chip-label {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .mp-chip-remove {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 16px;
+        height: 16px;
+        padding: 0;
+        border: none;
+        border-radius: 50%;
+        background: transparent;
+        color: var(--neutral-foreground-hint, #888888);
+        font-size: 11px;
+        cursor: pointer;
+    }
+
+    .mp-chip-remove:hover {
+        color: var(--neutral-foreground-rest, #000000);
+        background: rgba(128, 128, 128, 0.25);
+    }
+
+    .model-picker-menu {
+        position: absolute;
+        z-index: 6000;
+        top: calc(100% + 2px);
+        left: 0;
+        right: 0;
+        margin: 0;
+        padding: 4px;
+        list-style: none;
+        max-height: 260px;
+        overflow-y: auto;
+        background: var(--neutral-layer-1, #ffffff);
+        border: 1px solid rgba(128, 128, 128, 0.35);
+        border-radius: 4px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+    }
+
+    .model-picker-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 12px;
+        padding: 6px 10px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        color: var(--neutral-foreground-rest, inherit);
+    }
+
+    .model-picker-item:hover,
+    .model-picker-item.selected {
+        background: var(--accent-base-color, #00cca3);
+        color: #06251f;
+    }
+
+    .model-picker-item .mp-id {
+        font-family: monospace;
+        font-size: 12px;
+        opacity: 0.65;
+        white-space: nowrap;
+    }
+
+    .model-picker-item:hover .mp-id,
+    .model-picker-item.selected .mp-id {
+        opacity: 0.9;
+    }
+
+    .model-picker-empty {
+        padding: 6px 10px;
+        font-size: 13px;
+        font-style: italic;
+        color: var(--neutral-foreground-hint, #888888);
+    }
+</style>
+
+@* Dropdown of known models + free-text custom id. Registered pick -> removable chip. *@
+<div class="model-picker-wrap">
+    @if (SelectedModel is { } selected && !_editing)
+    {
+        <div class="model-picker-field" @onclick="BeginEdit" title="@selected.Id">
+            <span class="model-picker-chip">
+                <span class="mp-chip-label">@selected.Name</span>
+                <button type="button" class="mp-chip-remove" title="Remove"
+                        @onclick="Clear" @onclick:stopPropagation="true">✕</button>
+            </span>
+        </div>
+    }
+    else
+    {
+        <input @ref="_inputRef"
+               class="model-picker"
+               type="text"
+               value="@Value"
+               @oninput="OnInput"
+               @onfocus="() => _open = true"
+               @onblur="OnBlur"
+               @onkeydown="OnKeyDown"
+               placeholder="@Placeholder"
+               autocomplete="off"
+               spellcheck="false" />
+        @if (_open)
+        {
+            var matches = Filtered().ToList();
+            <ul class="model-picker-menu">
+                @if (matches.Count == 0)
+                {
+                    <li class="model-picker-empty">No registered models match — press Enter to use it as a custom id.</li>
+                }
+                else
+                {
+                    @foreach (var model in matches)
+                    {
+                        <li class="model-picker-item @(model.Id == Value ? "selected" : "")"
+                            @onmousedown:preventDefault="true"
+                            @onmousedown="() => Select(model)">
+                            <span class="mp-name">@OptionLabel(model)</span>
+                            <span class="mp-id">@model.Id</span>
+                        </li>
+                    }
+                }
+            </ul>
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public IEnumerable<AIModel> Models { get; set; } = [];
+
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+
+    [Parameter] public string? Placeholder { get; set; }
+
+    // Override for suggestion labels; defaults to name + capability tags.
+    [Parameter] public Func<AIModel, string>? LabelSelector { get; set; }
+
+    private bool _open;
+    private bool _editing;      // text field shown (typing / picking) vs chip
+    private bool _focusPending; // focus the input after it next renders
+    private ElementReference _inputRef;
+
+    // Registered model matching Value (null for a custom id).
+    private AIModel? SelectedModel =>
+        string.IsNullOrWhiteSpace(Value)
+            ? null
+            : Models.FirstOrDefault(m => string.Equals(m.Id, Value, StringComparison.OrdinalIgnoreCase));
+
+    private IEnumerable<AIModel> Filtered()
+    {
+        if (string.IsNullOrWhiteSpace(Value) || SelectedModel is not null)
+        {
+            return Models;
+        }
+
+        return Models.Where(m =>
+            m.Name.Contains(Value, StringComparison.OrdinalIgnoreCase) ||
+            m.Id.Contains(Value, StringComparison.OrdinalIgnoreCase));
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_focusPending)
+        {
+            _focusPending = false;
+            try { await _inputRef.FocusAsync(); } catch { }
+        }
+    }
+
+    private async Task OnInput(ChangeEventArgs e)
+    {
+        Value = e.Value?.ToString();
+        _open = true;
+        _editing = true;
+        await ValueChanged.InvokeAsync(Value);
+    }
+
+    private async Task Select(AIModel model)
+    {
+        Value = model.Id;
+        _open = false;
+        _editing = false;
+        await ValueChanged.InvokeAsync(Value);
+    }
+
+    private void BeginEdit()
+    {
+        _editing = true;
+        _open = true;
+        _focusPending = true;
+    }
+
+    private async Task Clear()
+    {
+        Value = null;
+        _editing = true;
+        _open = true;
+        _focusPending = true;
+        await ValueChanged.InvokeAsync(Value);
+    }
+
+    private void OnBlur()
+    {
+        _open = false;
+        _editing = false;
+    }
+
+    private void OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key is "Escape" or "Enter" or "Tab")
+        {
+            _open = false;
+            _editing = false;
+        }
+        else
+        {
+            _open = true;
+        }
+    }
+
+    private string OptionLabel(AIModel model)
+    {
+        if (LabelSelector is not null)
+        {
+            return LabelSelector(model);
+        }
+
+        var caps = new List<string>();
+        if (model is IVisionModel) caps.Add("Vision");
+        if (model is IReasoningModel) caps.Add("Reasoning");
+        if (model is IImageGenerationModel) caps.Add("Image Gen");
+        return caps.Count > 0 ? $"{model.Name}  [{string.Join(", ", caps)}]" : model.Name;
+    }
+}

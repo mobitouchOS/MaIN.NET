@@ -26,6 +26,11 @@ RUN dotnet publish MaIN.InferPage/MaIN.InferPage.csproj \
 RUN mkdir -p /app/out/wwwroot/_framework && \
     cp MaIN.InferPage/docker-assets/blazor.web.js /app/out/wwwroot/_framework/blazor.web.js
 
+# Node.js/npx runtime for MCP servers (most are distributed via npm, e.g. `npx @some/mcp-server`).
+# Copied rather than apt-installed so the version is pinned and identical across all four runtime
+# targets below, regardless of what each base image's own package repo carries.
+FROM node:22-slim AS node-runtime
+
 FROM nvidia/cuda:12.9.1-runtime-ubuntu24.04 AS runtime-cuda
 
 RUN apt-get update \
@@ -48,12 +53,18 @@ ENV MaIN_ModelsPath=/app/Models
 ENV NVIDIA_VISIBLE_DEVICES=all
 ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
 ENV LD_LIBRARY_PATH=/usr/lib/wsl/lib
+ENV MaIN__FileSystemSettings__Path=/app/Data
 
 VOLUME /app/Models
 VOLUME /app/DataProtection-Keys
+VOLUME /app/Data
 EXPOSE 5555
 
 COPY --from=publish /app/out .
+COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
+COPY --from=node-runtime /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
 
 RUN find /app/runtimes/linux-x64/native -maxdepth 2 -mindepth 1 -type d \
     | tee /etc/ld.so.conf.d/llamasharp.conf \
@@ -109,12 +120,18 @@ ENV ASPNETCORE_URLS=http://+:5555
 ENV ASPNETCORE_ENVIRONMENT=Production
 ENV MaIN__ModelsPath=/app/Models
 ENV MaIN_ModelsPath=/app/Models
+ENV MaIN__FileSystemSettings__Path=/app/Data
 
 VOLUME /app/Models
 VOLUME /app/DataProtection-Keys
+VOLUME /app/Data
 EXPOSE 5555
 
 COPY --from=publish /app/out .
+COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
+COPY --from=node-runtime /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
 
 RUN find /app/runtimes/linux-x64/native -maxdepth 2 -mindepth 1 -type d \
     | tee /etc/ld.so.conf.d/llamasharp.conf \
@@ -166,10 +183,16 @@ ENV ASPNETCORE_URLS=http://+:5555
 ENV ASPNETCORE_ENVIRONMENT=Production
 ENV MaIN__OllamaBaseUrl=http://host.docker.internal:11434
 ENV MaIN__BackendType=7
+ENV MaIN__FileSystemSettings__Path=/app/Data
 
+VOLUME /app/Data
 EXPOSE 5555
 
 COPY --from=publish /app/out .
+COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
+COPY --from=node-runtime /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
 
 ENTRYPOINT ["dotnet", "MaIN.InferPage.dll"]
 
@@ -183,12 +206,18 @@ ENV ASPNETCORE_URLS=http://+:5555
 ENV ASPNETCORE_ENVIRONMENT=Production
 ENV MaIN__OllamaBaseUrl=http://localhost:11434
 ENV MaIN__BackendType=7
+ENV MaIN__FileSystemSettings__Path=/app/Data
 
 VOLUME /root/.ollama
+VOLUME /app/Data
 EXPOSE 5555
 EXPOSE 11434
 
 COPY --from=publish /app/out .
+COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
+COPY --from=node-runtime /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
 COPY entrypoint-ollama.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 

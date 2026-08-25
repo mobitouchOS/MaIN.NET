@@ -17,6 +17,8 @@ services:
       # self (default) | openai | gemini | deepseek | groqcloud | anthropic | xai | ollama
       backend: ${BACKEND:-self}
       MaIN__ApiKey: ${MAIN_API_KEY:-}
+      # SECURITY: off by default -- MCP servers run an arbitrary command on this container, unsandboxed.
+      MaIN__AllowMcpConfiguration: ${MAIN_ALLOW_MCP_CONFIGURATION:-false}
       # SearXNG is bundled in the default runtime-cpu and runtime-cuda images.
       # Override only if you run SearXNG externally.
       MaIN__SearxngBaseUrl: http://127.0.0.1:8080
@@ -39,6 +41,7 @@ services:
     volumes:
       - inferpage-models:/app/Models
       - inferpage-dataprotection-keys:/app/DataProtection-Keys
+      - inferpage-agents-data:/app/Data
       - inferpage-ollama-data:/root/.ollama  # only populated when using an ollama-bundled target
     # Uncomment to enable NVIDIA GPU pass-through (also set INFERPAGE_TARGET=runtime-cuda):
     # deploy:
@@ -52,4 +55,5 @@ services:
 volumes:
   inferpage-models:
   inferpage-dataprotection-keys:
+  inferpage-agents-data:
   inferpage-ollama-data:

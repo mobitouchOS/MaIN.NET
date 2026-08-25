@@ -1,0 +1,662 @@
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@using MaIN.Domain.Configuration
+@using MaIN.Domain.Entities.Agents
+@using MaIN.Domain.Models.Abstract
+@using MaIN.InferPage.Services
+@inject AgentDefinitionService AgentService
+@inject ActiveAgentState ActiveAgent
+
+<link rel="stylesheet" href="agents.css">
+
+<div class="settings-overlay" @onclick="@(() => OnClose.InvokeAsync())">
+    <div class="settings-panel agents-panel" @onclick:stopPropagation="true">
+        <div class="settings-header">
+            <h2>Agents</h2>
+            <FluentButton Appearance="Appearance.Lightweight"
+                          Style="--neutral-fill-stealth-rest: transparent; --neutral-fill-stealth-hover: rgba(128,128,128,0.15); --neutral-fill-stealth-active: rgba(128,128,128,0.25);"
+                          OnClick="@OnClose"
+                          IconStart="@(new Icons.Regular.Size24.Dismiss())">
+            </FluentButton>
+        </div>
+
+        <div class="settings-body">
+            <div class="agents-layout">
+                <section class="agents-list">
+                    <h3>Saved agents</h3>
+                    @if (_agents.Count == 0)
+                    {
+                        <p class="muted">No agents yet. Create one on the right.</p>
+                    }
+                    else
+                    {
+                        @foreach (var agent in _agents)
+                        {
+                            var isActive = agent.Id == ActiveAgent.Current?.Id;
+                            <div class="agent-card @(isActive ? "active" : "")">
+                                <div class="agent-card-main">
+                                    <strong>@agent.Name</strong>
+                                    @if (agent.Config?.McpConfig is not null)
+                                    {
+                                        <span class="mcp-badge" title="This agent runs an MCP server">@McpBadgeText(agent)</span>
+                                        @if (IsMcpOutOfSync(agent))
+                                        {
+                                            <FluentButton Appearance="Appearance.Lightweight"
+                                                          Title="Catalog entry changed since this agent was saved — click to resync"
+                                                          OnClick="@(() => ResyncAgentMcp(agent))"
+                                                          Disabled="@_mcpBusy"
+                                                          IconStart="@(new Icons.Regular.Size16.ArrowSync())">
+                                                Resync
+                                            </FluentButton>
+                                        }
+                                    }
+                                    <span class="muted">@agent.Model</span>
+                                    <code class="agent-ref">agent:@agent.Id</code>
+                                </div>
+                                <div class="agent-card-actions">
+                                    @if (isActive)
+                                    {
+                                        <FluentButton Appearance="Appearance.Lightweight"
+                                                      Title="Exit agent"
+                                                      OnClick="@ExitActiveAgent"
+                                                      IconStart="@(new Icons.Regular.Size20.Dismiss())">
+                                        </FluentButton>
+                                    }
+                                    <FluentButton Appearance="Appearance.Lightweight"
+                                                  Title="Use this agent"
+                                                  OnClick="@(() => OnAgentSelected.InvokeAsync(agent))"
+                                                  IconStart="@(new Icons.Regular.Size20.Chat())">
+                                    </FluentButton>
+                                    <FluentButton Appearance="Appearance.Lightweight"
+                                                  Title="Edit agent"
+                                                  OnClick="@(() => StartEdit(agent))"
+                                                  IconStart="@(new Icons.Regular.Size20.Edit())">
+                                    </FluentButton>
+                                    <FluentButton Appearance="Appearance.Lightweight"
+                                                  OnClick="@(() => DeleteAgent(agent.Id))"
+                                                  IconStart="@(new Icons.Regular.Size20.Delete())">
+                                    </FluentButton>
+                                </div>
+                            </div>
+                        }
+                    }
+                </section>
+                <section class="agents-form">
+                    <h3>@(_editingId is null ? "New agent" : "Edit agent")</h3>
+                    <label>Name</label>
+                    <FluentTextField @bind-Value="_name" Placeholder="e.g., Research Assistant" Style="width: 100%;" />
+                    <label>Backend</label>
+                    <FluentSelect TOption="BackendOption"
+                                  Items="@_backendOptions"
+                                  OptionValue="@(o => o.Id.ToString())"
+                                  OptionText="@(o => o.DisplayName)"
+                                  @bind-SelectedOption="_selectedBackend"
+                                  @bind-SelectedOption:after="OnBackendChanged"
+                                  Style="width: 100%;" />
+                    <label>Model</label>
+                    <ModelPicker Models="@AgentModelSuggestions"
+                                 @bind-Value="_modelId"
+                                 Placeholder="Search or type a model id..." />
+                    <label>System prompt</label>
+                    <FluentTextArea @bind-Value="_systemPrompt" Rows="5" Placeholder="You are a helpful assistant..." Style="width: 100%;" />
+                    <label>Built-in tools</label>
+                    <div class="tool-list">
+                        @foreach (var tool in _toolChoices)
+                        {
+                            <FluentCheckbox @bind-Value="tool.Selected">
+                                <span title="@tool.Description">@tool.DisplayName</span>
+                            </FluentCheckbox>
+                        }
+                    </div>
+                    @* SECURITY: rendered only when the host operator opted in via MaIN:AllowMcpConfiguration. *@
+                    @if (Utils.AllowMcpConfiguration)
+                    {
+                        <label>MCP server</label>
+                        <FluentCheckbox @bind-Value="_mcpEnabled">Enable MCP for this agent</FluentCheckbox>
+                        @if (_mcpEnabled)
+                        {
+                            <div class="mcp-warning">
+                                ⚠ MCP servers run an arbitrary command on this machine with no sandboxing.
+                                Only configure MCP servers from sources you fully trust.
+                            </div>
+                            @if (McpUnsupportedBackend())
+                            {
+                                <p class="mcp-note">MCP is not supported on Self/DeepSeek/Ollama backends — this agent's MCP config would fail at runtime.</p>
+                            }
+
+                            @if (!_showNewServerForm)
+                            {
+                                <div class="mcp-picker-row">
+                                    <FluentSelect TOption="McpServerCatalogEntry"
+                                                  Items="@_mcpServers"
+                                                  OptionValue="@(s => s.Id)"
+                                                  OptionText="@(s => s.Name)"
+                                                  @bind-SelectedOption="_selectedServer"
+                                                  Placeholder="Choose a server..."
+                                                  Style="flex:1;" />
+                                    <FluentButton Appearance="Appearance.Lightweight" OnClick="@(() => _showNewServerForm = true)">+ New server</FluentButton>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="mcp-new-server-form">
+                                    <label>Server name</label>
+                                    <FluentTextField @bind-Value="_newServerName" Placeholder="e.g., filesystem" Style="width: 100%;" />
+                                    <label>Command</label>
+                                    <FluentTextField @bind-Value="_newServerCommand" Placeholder="npx" Style="width: 100%;" />
+                                    <label>Arguments (one per line)</label>
+                                    <FluentTextArea @bind-Value="_newServerArguments" Rows="3" Placeholder="one argument per line" Style="width: 100%;" />
+                                    <label>Environment variables (one KEY=VALUE per line)</label>
+                                    <FluentTextArea @bind-Value="_newServerEnvironment" Rows="3" Placeholder="API_TOKEN=abc123" Style="width: 100%;" />
+                                    @if (_mcpServers.Count > 0)
+                                    {
+                                        <FluentButton Appearance="Appearance.Lightweight" OnClick="@(() => _showNewServerForm = false)">Cancel — choose existing instead</FluentButton>
+                                    }
+                                </div>
+                            }
+
+                            @if (_mcpServers.Count > 0)
+                            {
+                                <FluentButton Appearance="Appearance.Lightweight" OnClick="@(() => _showManageServers = !_showManageServers)">
+                                    @(_showManageServers ? "Hide servers" : "Manage servers")
+                                </FluentButton>
+                                @if (_showManageServers)
+                                {
+                                    <div class="mcp-catalog-list">
+                                        @foreach (var server in _mcpServers)
+                                        {
+                                            @if (_editingServerId == server.Id)
+                                            {
+                                                <div class="mcp-catalog-edit-form">
+                                                    <FluentTextField @bind-Value="_editServerName" Placeholder="Server name" Style="width: 100%;" />
+                                                    <FluentTextField @bind-Value="_editServerCommand" Placeholder="Command" Style="width: 100%;" />
+                                                    <FluentTextArea @bind-Value="_editServerArguments" Rows="2" Placeholder="Arguments, one per line" Style="width: 100%;" />
+                                                    <FluentTextArea @bind-Value="_editServerEnvironment" Rows="2" Placeholder="KEY=VALUE, one per line" Style="width: 100%;" />
+                                                    <div style="display:flex; gap:0.5rem;">
+                                                        <FluentButton Appearance="Appearance.Accent" OnClick="SaveEditedServer" Disabled="@_mcpBusy">Save server</FluentButton>
+                                                        <FluentButton Appearance="Appearance.Lightweight" OnClick="CancelEditServer">Cancel</FluentButton>
+                                                    </div>
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <div class="mcp-catalog-row">
+                                                    <span>@server.Name</span>
+                                                    <span class="muted">@server.Command</span>
+                                                    <div style="display:flex; gap:0.25rem;">
+                                                        <FluentButton Appearance="Appearance.Lightweight"
+                                                                      Title="Edit server"
+                                                                      OnClick="@(() => StartEditServer(server))"
+                                                                      IconStart="@(new Icons.Regular.Size16.Edit())">
+                                                        </FluentButton>
+                                                        <FluentButton Appearance="Appearance.Lightweight"
+                                                                      Title="Delete server"
+                                                                      OnClick="@(() => DeleteMcpServer(server))"
+                                                                      Disabled="@_mcpBusy"
+                                                                      IconStart="@(new Icons.Regular.Size16.Delete())">
+                                                        </FluentButton>
+                                                    </div>
+                                                </div>
+                                            }
+                                        }
+                                    </div>
+                                }
+                            }
+                        }
+                    }
+                    @if (!string.IsNullOrEmpty(_error))
+                    {
+                        <p class="error">@_error</p>
+                    }
+                    <div style="display:flex; gap:0.5rem;">
+                        <FluentButton Appearance="Appearance.Accent" OnClick="SaveAgent" Disabled="_busy">
+                            @(_busy ? "Saving..." : (_editingId is null ? "Create agent" : "Save"))
+                        </FluentButton>
+                        @if (_editingId is not null)
+                        {
+                            <FluentButton Appearance="Appearance.Lightweight" OnClick="CancelEdit" Disabled="_busy">
+                                Cancel
+                            </FluentButton>
+                        }
+                    </div>
+                </section>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback<Agent> OnAgentSelected { get; set; }
+
+    [Inject] private McpServerCatalogService McpCatalog { get; set; } = default!;
+
+    private List<Agent> _agents = [];
+    private string _name = string.Empty;
+    private string _systemPrompt = "You are a helpful assistant.";
+    private readonly List<ToolChoice> _toolChoices =
+        BuiltInToolCatalog.All.Select(t => new ToolChoice(t.Name, t.DisplayName, t.Description)).ToList();
+    private string _error = string.Empty;
+    private bool _busy;
+    private string? _editingId;
+
+    // Backend + model selection
+    private List<BackendOption> _backendOptions = BackendOptions.All;
+    private BackendOption? _selectedBackend;
+    private string _modelId = string.Empty;
+    private static readonly LocalModel[] _localModels = ModelRegistry.GetAllLocal().OrderBy(m => m.Name).ToArray();
+
+    private IEnumerable<AIModel> AgentModelSuggestions =>
+        _selectedBackend?.BackendType == BackendType.Self
+            ? _localModels.Where(Utils.IsBuiltInModel)
+            : _selectedBackend is null
+                ? []
+                : ModelRegistry.GetAllCloud()
+                    .Where(m => m.Backend == _selectedBackend.BackendType && Utils.IsBuiltInModel(m))
+                    .OrderBy(m => m.Name);
+
+    // MCP catalog
+    private List<McpServerCatalogEntry> _mcpServers = [];
+    private bool _mcpEnabled;
+    private McpServerCatalogEntry? _selectedServer;
+    private bool _showNewServerForm;
+    private bool _showManageServers;
+    private string _newServerName = string.Empty;
+    private string _newServerCommand = string.Empty;
+    private string _newServerArguments = string.Empty;
+    private string _newServerEnvironment = string.Empty;
+    private string _confirmDeleteServerId = string.Empty;
+    private bool _mcpBusy;
+
+    // In-place editing of an existing catalog entry from the "Manage servers" list
+    // (independent of the agent form's own Save button).
+    private string? _editingServerId;
+    private string _editServerName = string.Empty;
+    private string _editServerCommand = string.Empty;
+    private string _editServerArguments = string.Empty;
+    private string _editServerEnvironment = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Default to Local so the model list is populated on first render.
+        _selectedBackend ??= _backendOptions.FirstOrDefault(o => o.BackendType == BackendType.Self);
+        await ReloadAgents();
+        await ReloadMcpServers();
+    }
+
+    private async Task ReloadAgents()
+    {
+        try
+        {
+            _agents = await AgentService.GetAllAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ReloadMcpServers()
+    {
+        _mcpServers = await McpCatalog.GetAllAsync();
+    }
+
+    private void OnBackendChanged() => _modelId = string.Empty;
+
+    private async Task SaveAgent()
+    {
+        _error = string.Empty;
+        if (string.IsNullOrWhiteSpace(_name) || string.IsNullOrWhiteSpace(_modelId))
+        {
+            _error = "Name and model are required.";
+            return;
+        }
+
+        var (mcpRequest, mcpError) = await BuildMcpRequestAsync();
+        if (mcpError is not null)
+        {
+            _error = mcpError;
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            var toolNames = _toolChoices.Where(t => t.Selected).Select(t => t.Name).ToList();
+            var request = new CreateAgentRequest(_name.Trim(), _modelId.Trim(), _systemPrompt, toolNames, mcpRequest);
+            var editingId = _editingId;
+
+            var savedAgent = editingId is null
+                ? await AgentService.CreateAsync(request)
+                : await AgentService.UpdateAsync(editingId, request);
+
+            if (editingId is not null && editingId == ActiveAgent.Current?.Id)
+            {
+                ActiveAgent.Set(savedAgent);
+            }
+
+            ResetForm();
+            await ReloadAgents();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    // SECURITY: only reachable when Utils.AllowMcpConfiguration is true (gated in the markup);
+    // _mcpEnabled itself defaults to false so no Mcp is attached unless the user opts in.
+    private async Task<(McpServerRequest? Mcp, string? Error)> BuildMcpRequestAsync()
+    {
+        if (!Utils.AllowMcpConfiguration || !_mcpEnabled)
+        {
+            return (null, null);
+        }
+
+        if (_showNewServerForm)
+        {
+            if (string.IsNullOrWhiteSpace(_newServerCommand))
+            {
+                return (null, "MCP is enabled but no command was entered. Fill in the command, or disable MCP for this agent.");
+            }
+
+            // Blank name falls back to the command string — same convention as SaveEditedServer.
+            var created = await McpCatalog.CreateAsync(
+                string.IsNullOrWhiteSpace(_newServerName) ? _newServerCommand.Trim() : _newServerName.Trim(),
+                _newServerCommand.Trim(),
+                SplitLines(_newServerArguments).ToList(),
+                ParseEnvironment(_newServerEnvironment));
+
+            await ReloadMcpServers();
+            _selectedServer = created;
+            _showNewServerForm = false;
+            return (ToMcpServerRequest(created), null);
+        }
+
+        return _selectedServer is null
+            ? (null, "MCP is enabled but no server is selected. Choose a server from the list, or create a new one.")
+            : (ToMcpServerRequest(_selectedServer), null);
+    }
+
+    private static McpServerRequest ToMcpServerRequest(McpServerCatalogEntry entry) =>
+        new(entry.Name, entry.Command, entry.Arguments, entry.EnvironmentVariables, entry.Id, entry.Name);
+
+    private static IEnumerable<string> SplitLines(string value) =>
+        value.Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0);
+
+    private static Dictionary<string, string> ParseEnvironment(string value)
+    {
+        var environment = new Dictionary<string, string>();
+        foreach (var line in SplitLines(value))
+        {
+            var separator = line.IndexOf('=');
+            if (separator <= 0)
+            {
+                continue;
+            }
+
+            var key = line[..separator].Trim();
+            if (key.Length > 0)
+            {
+                environment[key] = line[(separator + 1)..].Trim();
+            }
+        }
+        return environment;
+    }
+
+    private bool McpUnsupportedBackend() =>
+        _selectedBackend?.BackendType is BackendType.Self or BackendType.DeepSeek or BackendType.Ollama;
+
+    private void StartEdit(Agent agent)
+    {
+        _editingId = agent.Id;
+        _name = agent.Name;
+        _systemPrompt = agent.Config.Instruction ?? string.Empty;
+
+        var selectedNames = new HashSet<string>(
+            agent.ToolsConfiguration?.Tools.Select(t => t.Function?.Name).OfType<string>() ?? Enumerable.Empty<string>(),
+            StringComparer.OrdinalIgnoreCase);
+        foreach (var t in _toolChoices)
+        {
+            t.Selected = selectedNames.Contains(t.Name);
+        }
+
+        SetModelSelectionFor(agent.Model);
+
+        _showNewServerForm = false;
+        _selectedServer = null;
+        _newServerName = _newServerCommand = _newServerArguments = _newServerEnvironment = string.Empty;
+
+        var mcp = agent.Config?.McpConfig;
+        _mcpEnabled = mcp is not null;
+        if (mcp is not null)
+        {
+            var catalogId = mcp.Properties.GetValueOrDefault(McpProvenance.CatalogServerIdKey);
+            var catalogMatch = string.IsNullOrEmpty(catalogId) ? null : _mcpServers.FirstOrDefault(s => s.Id == catalogId);
+
+            if (catalogMatch is not null)
+            {
+                _selectedServer = catalogMatch;
+            }
+            else
+            {
+                // Legacy hand-typed config (pre-dates this feature), or its catalog entry was
+                // deleted — reopen it as "new server" so saving re-creates a catalog entry from it.
+                _showNewServerForm = true;
+                _newServerName = mcp.Name;
+                _newServerCommand = mcp.Command;
+                _newServerArguments = string.Join('\n', mcp.Arguments);
+                _newServerEnvironment = string.Join('\n', mcp.EnvironmentVariables.Select(kv => $"{kv.Key}={kv.Value}"));
+            }
+        }
+
+        _error = string.Empty;
+    }
+
+    // Reconstructs the Backend/Model UI selection from a saved agent's Model id.
+    // Ollama has two BackendOptions (Local/Cloud) mapping to the same BackendType — since agents
+    // don't persist which Ollama variant they used, editing defaults to the first (Local) match;
+    // this only affects the pre-selected UI state, not the saved Model id itself.
+    private void SetModelSelectionFor(string modelId)
+    {
+        _modelId = modelId;
+        _selectedBackend = ModelRegistry.TryGetById(modelId, out var model) && model is not null
+            ? _backendOptions.FirstOrDefault(o => o.BackendType == model.Backend)
+            : _backendOptions.FirstOrDefault(o => o.BackendType == BackendType.Self);
+    }
+
+    private void CancelEdit() => ResetForm();
+
+    private void ResetForm()
+    {
+        _editingId = null;
+        _name = string.Empty;
+        _systemPrompt = "You are a helpful assistant.";
+        foreach (var t in _toolChoices) t.Selected = false;
+
+        _selectedBackend = _backendOptions.FirstOrDefault(o => o.BackendType == BackendType.Self);
+        _modelId = string.Empty;
+
+        _mcpEnabled = false;
+        _selectedServer = null;
+        _showNewServerForm = false;
+        _showManageServers = false;
+        _newServerName = _newServerCommand = _newServerArguments = _newServerEnvironment = string.Empty;
+    }
+
+    private void ExitActiveAgent()
+    {
+        ActiveAgent.Clear();
+        StateHasChanged();
+    }
+
+    private async Task DeleteAgent(string id)
+    {
+        _error = string.Empty;
+        try
+        {
+            await AgentService.DeleteAsync(id);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        await ReloadAgents();
+    }
+
+    private static string McpBadgeText(Agent agent)
+    {
+        var name = agent.Config?.McpConfig?.Properties.GetValueOrDefault(McpProvenance.CatalogServerNameKey);
+        return string.IsNullOrEmpty(name) ? "MCP" : $"MCP: {name}";
+    }
+
+    private bool IsMcpOutOfSync(Agent agent)
+    {
+        var mcp = agent.Config?.McpConfig;
+        if (mcp is null)
+        {
+            return false;
+        }
+
+        var catalogId = mcp.Properties.GetValueOrDefault(McpProvenance.CatalogServerIdKey);
+        if (string.IsNullOrEmpty(catalogId))
+        {
+            return false;
+        }
+
+        var entry = _mcpServers.FirstOrDefault(s => s.Id == catalogId);
+        if (entry is null)
+        {
+            return false; // catalog entry was deleted — nothing to resync from
+        }
+
+        return entry.Command != mcp.Command
+            || !entry.Arguments.SequenceEqual(mcp.Arguments)
+            || !entry.EnvironmentVariables.OrderBy(kv => kv.Key).SequenceEqual(mcp.EnvironmentVariables.OrderBy(kv => kv.Key));
+    }
+
+    private async Task ResyncAgentMcp(Agent agent)
+    {
+        if (_mcpBusy)
+        {
+            return;
+        }
+
+        var catalogId = agent.Config?.McpConfig?.Properties.GetValueOrDefault(McpProvenance.CatalogServerIdKey);
+        var entry = _mcpServers.FirstOrDefault(s => s.Id == catalogId);
+        if (entry is null)
+        {
+            return;
+        }
+
+        _mcpBusy = true;
+        _error = string.Empty;
+        try
+        {
+            var toolNames = agent.ToolsConfiguration?.Tools.Select(t => t.Function?.Name).OfType<string>().ToList() ?? [];
+            var request = new CreateAgentRequest(agent.Name, agent.Model, agent.Config?.Instruction ?? string.Empty, toolNames, ToMcpServerRequest(entry));
+            await AgentService.UpdateAsync(agent.Id, request);
+            await ReloadAgents();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _mcpBusy = false;
+        }
+    }
+
+    private async Task DeleteMcpServer(McpServerCatalogEntry server)
+    {
+        if (_mcpBusy)
+        {
+            return;
+        }
+
+        _mcpBusy = true;
+        try
+        {
+            _error = string.Empty;
+            var referencingAgents = _agents
+                .Where(a => a.Config?.McpConfig?.Properties.GetValueOrDefault(McpProvenance.CatalogServerIdKey) == server.Id)
+                .Select(a => a.Name)
+                .ToList();
+
+            if (referencingAgents.Count > 0 && _confirmDeleteServerId != server.Id)
+            {
+                _confirmDeleteServerId = server.Id;
+                _error = $"Used by: {string.Join(", ", referencingAgents)}. Existing agents keep their own copy of this config — click delete again to remove the catalog entry anyway.";
+                return;
+            }
+
+            _confirmDeleteServerId = string.Empty;
+            if (_selectedServer?.Id == server.Id)
+            {
+                _selectedServer = null;
+            }
+            await McpCatalog.DeleteAsync(server.Id);
+            await ReloadMcpServers();
+        }
+        finally
+        {
+            _mcpBusy = false;
+        }
+    }
+
+    private void StartEditServer(McpServerCatalogEntry server)
+    {
+        _editingServerId = server.Id;
+        _editServerName = server.Name;
+        _editServerCommand = server.Command;
+        _editServerArguments = string.Join('\n', server.Arguments);
+        _editServerEnvironment = string.Join('\n', server.EnvironmentVariables.Select(kv => $"{kv.Key}={kv.Value}"));
+    }
+
+    private void CancelEditServer() => _editingServerId = null;
+
+    private async Task SaveEditedServer()
+    {
+        if (_editingServerId is null || string.IsNullOrWhiteSpace(_editServerCommand) || _mcpBusy)
+        {
+            return;
+        }
+
+        _mcpBusy = true;
+        try
+        {
+            var updated = await McpCatalog.UpdateAsync(
+                _editingServerId,
+                string.IsNullOrWhiteSpace(_editServerName) ? _editServerCommand.Trim() : _editServerName.Trim(),
+                _editServerCommand.Trim(),
+                SplitLines(_editServerArguments).ToList(),
+                ParseEnvironment(_editServerEnvironment));
+
+            if (_selectedServer?.Id == updated.Id)
+            {
+                _selectedServer = updated;
+            }
+
+            _editingServerId = null;
+            await ReloadMcpServers();
+        }
+        finally
+        {
+            _mcpBusy = false;
+        }
+    }
+
+    // FluentCheckbox @bind-Value needs a settable property expression; a dictionary indexer throws at runtime.
+    private sealed class ToolChoice(string name, string displayName, string description)
+    {
+        public string Name { get; } = name;
+        public string DisplayName { get; } = displayName;
+        public string Description { get; } = description;
+        public bool Selected { get; set; }
+    }
+}

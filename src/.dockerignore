@@ -8,3 +8,5 @@ MaIN.Core.UnitTests/
 MaIN.Core.IntegrationTests/
 MaIN.Core.E2ETests/
 **/appsettings.*.local.json
+# Local FileSystem-persistence runtime data (agents/chats/flows) — must never be baked into an image.
+MaIN.InferPage/Data/
