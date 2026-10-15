@@ -25,22 +25,37 @@ public static class Models
         public const string Gpt5_6Sol = "gpt-5.6-sol";
         public const string Gpt5_6Terra = "gpt-5.6-terra";
         public const string Gpt5_6Luna = "gpt-5.6-luna";
+        public const string Gpt6Astra = "gpt-6-astra";
+        public const string Gpt6Sol = "gpt-6-sol";
+        public const string Gpt6_1Sol = "gpt-6.1-sol";
+        public const string Gpt6Luna = "gpt-6-luna";
         public const string CodexMini = "codex-mini-latest";
         public const string O3 = "o3";
         public const string O3Mini = "o3-mini";
         public const string O4Mini = "o4-mini";
         public const string DallE3 = "dall-e-3";
         public const string GptImage1 = "gpt-image-1";
+        public const string GptImage2 = "gpt-image-2";
+        public const string GptImage2_5Sunburst = "gpt-image-2.5-sunburst";
+        public const string GptImage2_5Flare = "gpt-image-2.5-flare";
     }
 
     public static class Anthropic
     {
+        public const string ClaudeFable5_1 = "claude-fable-5-1";
+        public const string ClaudeMythos5_1 = "claude-mythos-5-1";
         public const string ClaudeFable5 = "claude-fable-5";
         public const string ClaudeMythos5 = "claude-mythos-5";
+        public const string ClaudeOpus5_5 = "claude-opus-5-5";
+        public const string ClaudeOpus5 = "claude-opus-5";
         public const string ClaudeOpus4_8 = "claude-opus-4-8";
         public const string ClaudeOpus4_7 = "claude-opus-4-7";
+        public const string ClaudeOpus4_6 = "claude-opus-4-6";
+        public const string ClaudeOpus4_5 = "claude-opus-4-5-20251101";
+        public const string ClaudeSonnet5_5 = "claude-sonnet-5-5";
         public const string ClaudeSonnet5 = "claude-sonnet-5";
         public const string ClaudeSonnet4_6 = "claude-sonnet-4-6";
+        public const string ClaudeHaiku5_5 = "claude-haiku-5-5";
         public const string ClaudeHaiku4_5 = "claude-haiku-4-5-20251001";
         public const string ClaudeSonnet4 = "claude-sonnet-4-20250514";
         public const string ClaudeSonnet4_5 = "claude-sonnet-4-5-20250929";
@@ -48,10 +63,19 @@ public static class Models
 
     public static class Gemini
     {
+        public const string Gemini4Argon = "gemini-4-argon";
+        public const string Gemini3_8Flash = "gemini-3.8-flash";
+        public const string Gemini3_6Flash = "gemini-3.6-flash";
         public const string Gemini3_5Flash = "gemini-3.5-flash";
+        public const string Gemini3_5FlashLite = "gemini-3.5-flash-lite";
+        public const string Gemini3FlashPreview = "gemini-3-flash-preview";
         public const string Gemini3_1FlashLite = "gemini-3.1-flash-lite";
         public const string Gemini3_1ProPreview = "gemini-3.1-pro-preview";
         public const string Gemini3_1FlashImagePreview = "gemini-3.1-flash-image-preview";
+        public const string Gemini3_1FlashImage = "gemini-3.1-flash-image";
+        public const string Gemini3_1FlashLiteImage = "gemini-3.1-flash-lite-image";
+        public const string Gemini3ProImage = "gemini-3-pro-image";
+        public const string NanoBanana2_1 = "gemini-nano-banana-2.1";
         public const string Gemini2_5Pro = "gemini-2.5-pro";
         public const string Gemini2_5Flash = "gemini-2.5-flash";
         public const string Gemini2_0Flash = "gemini-2.0-flash";
@@ -61,12 +85,19 @@ public static class Models
 
     public static class Xai
     {
+        public const string Grok4_7 = "grok-4.7";
+        public const string Grok4_6 = "grok-4.6";
+        public const string Grok4_5 = "grok-4.5";
+        public const string Grok4_3 = "grok-4.3";
+        public const string GrokBuild0_1 = "grok-build-0.1";
         public const string Grok4_20Reasoning = "grok-4.20-reasoning";
         public const string Grok4_20NonReasoning = "grok-4.20-non-reasoning";
         public const string Grok4_1FastReasoning = "grok-4-1-fast-reasoning";
         public const string Grok4_1FastNonReasoning = "grok-4-1-fast-non-reasoning";
         public const string GrokImagineImage = "grok-imagine-image";
         public const string GrokImagineImagePro = "grok-imagine-image-pro";
+        public const string GrokImagineImageQuality = "grok-imagine-image-quality";
+        public const string GrokImagineImage2_0 = "grok-imagine-image-2.0";
         public const string Grok3Beta = "grok-3-beta";
         public const string GrokImage = "grok-2-image";
     }
@@ -81,12 +112,16 @@ public static class Models
         public const string CompoundMini = "groq/compound-mini";
         public const string GptOss120b = "openai/gpt-oss-120b";
         public const string GptOss20b = "openai/gpt-oss-20b";
+        public const string MiniMaxM2_7 = "minimaxai/minimax-m2.7";
+        public const string Qwen3_8_27b = "qwen/qwen3.8-27b";
     }
 
     public static class DeepSeek
     {
         public const string Chat = "deepseek-chat";
         public const string Reasoner = "deepseek-reasoner";
+        public const string Flash = "deepseek-flash";
+        public const string V4Pro = "deepseek-v4-pro";
     }
 
     public static class Ollama

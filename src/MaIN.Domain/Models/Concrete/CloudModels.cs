@@ -242,6 +242,75 @@ public sealed record Gpt5_6Luna() : CloudModel(
     public string? MMProjectName => null;
 }
 
+public sealed record Gpt6Astra() : CloudModel(
+    Models.OpenAi.Gpt6Astra,
+    BackendType.OpenAi,
+    "GPT-6 Astra",
+    1_050_000,
+    "OpenAI's GPT-6 flagship reasoning model for the most demanding professional and agentic work"), IVisionModel, IReasoningModel
+{
+    public string? MMProjectName => null;
+    public Func<string, ThinkingState, LLMTokenValue>? ReasonFunction => null;
+    public string? AdditionalPrompt => null;
+}
+
+public sealed record Gpt6_1Sol() : CloudModel(
+    Models.OpenAi.Gpt6_1Sol,
+    BackendType.OpenAi,
+    "GPT-6.1 Sol",
+    1_050_000,
+    "OpenAI's latest frontier reasoning model for complex reasoning and coding tasks"), IVisionModel, IReasoningModel
+{
+    public string? MMProjectName => null;
+    public Func<string, ThinkingState, LLMTokenValue>? ReasonFunction => null;
+    public string? AdditionalPrompt => null;
+}
+
+public sealed record Gpt6Sol() : CloudModel(
+    Models.OpenAi.Gpt6Sol,
+    BackendType.OpenAi,
+    "GPT-6 Sol",
+    1_050_000,
+    "OpenAI's GPT-6 frontier reasoning model for complex reasoning and coding tasks"), IVisionModel, IReasoningModel
+{
+    public string? MMProjectName => null;
+    public Func<string, ThinkingState, LLMTokenValue>? ReasonFunction => null;
+    public string? AdditionalPrompt => null;
+}
+
+public sealed record Gpt6Luna() : CloudModel(
+    Models.OpenAi.Gpt6Luna,
+    BackendType.OpenAi,
+    "GPT-6 Luna",
+    1_050_000,
+    "OpenAI's cost-optimized GPT-6 model for high-volume workloads with optional reasoning"), IVisionModel, IReasoningModel
+{
+    public string? MMProjectName => null;
+    public Func<string, ThinkingState, LLMTokenValue>? ReasonFunction => null;
+    public string? AdditionalPrompt => null;
+}
+
+public sealed record GptImage2() : CloudModel(
+    Models.OpenAi.GptImage2,
+    BackendType.OpenAi,
+    "GPT Image 2",
+    4000,
+    "OpenAI's second-generation image generation model"), IImageGenerationModel;
+
+public sealed record GptImage2_5Sunburst() : CloudModel(
+    Models.OpenAi.GptImage2_5Sunburst,
+    BackendType.OpenAi,
+    "GPT Image 2.5 Sunburst",
+    4000,
+    "OpenAI's latest high-quality image generation model"), IImageGenerationModel;
+
+public sealed record GptImage2_5Flare() : CloudModel(
+    Models.OpenAi.GptImage2_5Flare,
+    BackendType.OpenAi,
+    "GPT Image 2.5 Flare",
+    4000,
+    "OpenAI's latest fast, cost-efficient image generation model"), IImageGenerationModel;
+
 // ===== Anthropic Models =====
 
 public sealed record ClaudeOpus4_7() : CloudModel(
@@ -336,7 +405,171 @@ public sealed record ClaudeOpus4_8() : CloudModel(
     public string? MMProjectName => null;
 }
 
+public sealed record ClaudeFable5_1() : CloudModel(
+    Models.Anthropic.ClaudeFable5_1,
+    BackendType.Anthropic,
+    "Claude Fable 5.1",
+    1_000_000,
+    "Anthropic's most capable model for demanding reasoning and long-horizon agentic work"), IVisionModel, IReasoningModel
+{
+    public string? MMProjectName => null;
+    public Func<string, ThinkingState, LLMTokenValue>? ReasonFunction => null;
+    public string? AdditionalPrompt => null;
+}
+
+public sealed record ClaudeMythos5_1() : CloudModel(
+    Models.Anthropic.ClaudeMythos5_1,
+    BackendType.Anthropic,
+    "Claude Mythos 5.1",
+    1_000_000,
+    "Anthropic's latest model for vetted cybersecurity and biology research partners"), IVisionModel, IReasoningModel
+{
+    public string? MMProjectName => null;
+    public Func<string, ThinkingState, LLMTokenValue>? ReasonFunction => null;
+    public string? AdditionalPrompt => null;
+}
+
+public sealed record ClaudeOpus5_5() : CloudModel(
+    Models.Anthropic.ClaudeOpus5_5,
+    BackendType.Anthropic,
+    "Claude Opus 5.5",
+    1_000_000,
+    "Anthropic's flagship model for long-running agentic coding and knowledge work"), IVisionModel, IReasoningModel
+{
+    public string? MMProjectName => null;
+    public Func<string, ThinkingState, LLMTokenValue>? ReasonFunction => null;
+    public string? AdditionalPrompt => null;
+}
+
+public sealed record ClaudeOpus5() : CloudModel(
+    Models.Anthropic.ClaudeOpus5,
+    BackendType.Anthropic,
+    "Claude Opus 5",
+    1_000_000,
+    "Anthropic's previous-generation Opus model for complex agentic and professional work"), IVisionModel
+{
+    public string? MMProjectName => null;
+}
+
+public sealed record ClaudeOpus4_6() : CloudModel(
+    Models.Anthropic.ClaudeOpus4_6,
+    BackendType.Anthropic,
+    "Claude Opus 4.6",
+    1_000_000,
+    "Legacy Claude Opus model with strong coding and agentic capabilities"), IVisionModel
+{
+    public string? MMProjectName => null;
+}
+
+public sealed record ClaudeOpus4_5() : CloudModel(
+    Models.Anthropic.ClaudeOpus4_5,
+    BackendType.Anthropic,
+    "Claude Opus 4.5",
+    200000,
+    "Legacy Claude Opus model with strong coding and agentic capabilities"), IVisionModel
+{
+    public string? MMProjectName => null;
+}
+
+public sealed record ClaudeSonnet5_5() : CloudModel(
+    Models.Anthropic.ClaudeSonnet5_5,
+    BackendType.Anthropic,
+    "Claude Sonnet 5.5",
+    1_000_000,
+    "Anthropic's best combination of speed and intelligence"), IVisionModel
+{
+    public string? MMProjectName => null;
+}
+
+public sealed record ClaudeHaiku5_5() : CloudModel(
+    Models.Anthropic.ClaudeHaiku5_5,
+    BackendType.Anthropic,
+    "Claude Haiku 5.5",
+    1_000_000,
+    "Anthropic's fastest model for high-volume, latency-sensitive tasks such as classification, extraction, and routing"), IVisionModel
+{
+    public string? MMProjectName => null;
+}
+
 // ===== Gemini Models =====
+
+public sealed record Gemini4Argon() : CloudModel(
+    Models.Gemini.Gemini4Argon,
+    BackendType.Gemini,
+    "Gemini 4 Argon",
+    1_048_576,
+    "Google's most capable Gemini model with multimodal input and configurable thinking"), IVisionModel
+{
+    public string? MMProjectName => null;
+}
+
+public sealed record Gemini3_8Flash() : CloudModel(
+    Models.Gemini.Gemini3_8Flash,
+    BackendType.Gemini,
+    "Gemini 3.8 Flash",
+    1_048_576,
+    "Google's latest Flash model balancing speed and intelligence for agentic workloads"), IVisionModel
+{
+    public string? MMProjectName => null;
+}
+
+public sealed record Gemini3_6Flash() : CloudModel(
+    Models.Gemini.Gemini3_6Flash,
+    BackendType.Gemini,
+    "Gemini 3.6 Flash",
+    1_048_576,
+    "Fast Gemini Flash model for coding, agentic tasks, and multi-step workflows"), IVisionModel
+{
+    public string? MMProjectName => null;
+}
+
+public sealed record Gemini3_5FlashLite() : CloudModel(
+    Models.Gemini.Gemini3_5FlashLite,
+    BackendType.Gemini,
+    "Gemini 3.5 Flash Lite",
+    1_048_576,
+    "Low-latency, cost-efficient Gemini 3.5 model for high-volume workloads"), IVisionModel
+{
+    public string? MMProjectName => null;
+}
+
+public sealed record Gemini3FlashPreview() : CloudModel(
+    Models.Gemini.Gemini3FlashPreview,
+    BackendType.Gemini,
+    "Gemini 3 Flash (Preview)",
+    1_048_576,
+    "Preview of Google's Gemini 3 Flash model"), IVisionModel
+{
+    public string? MMProjectName => null;
+}
+
+public sealed record Gemini3_1FlashImage() : CloudModel(
+    Models.Gemini.Gemini3_1FlashImage,
+    BackendType.Gemini,
+    "Gemini 3.1 Flash Image",
+    4000,
+    "Google's stable Gemini Flash image generation model"), IImageGenerationModel;
+
+public sealed record Gemini3_1FlashLiteImage() : CloudModel(
+    Models.Gemini.Gemini3_1FlashLiteImage,
+    BackendType.Gemini,
+    "Gemini 3.1 Flash Lite Image",
+    4000,
+    "Google's cost-efficient Gemini image generation model"), IImageGenerationModel;
+
+public sealed record Gemini3ProImage() : CloudModel(
+    Models.Gemini.Gemini3ProImage,
+    BackendType.Gemini,
+    "Gemini 3 Pro Image",
+    4000,
+    "Google's highest-quality Gemini image generation and editing model"), IImageGenerationModel;
+
+public sealed record GeminiNanoBanana2_1() : CloudModel(
+    Models.Gemini.NanoBanana2_1,
+    BackendType.Gemini,
+    "Nano Banana 2.1",
+    4000,
+    "Google's latest high-speed, high-fidelity image generation via Gemini API"), IImageGenerationModel;
 
 public sealed record Gemini3_5Flash() : CloudModel(
     Models.Gemini.Gemini3_5Flash,
@@ -456,6 +689,80 @@ public sealed record VertexImagen4_0Generate() : CloudModel(
     "Google's latest image generation model available through Vertex AI"), IImageGenerationModel;
 
 // ===== xAI Models =====
+
+public sealed record Grok4_7() : CloudModel(
+    Models.Xai.Grok4_7,
+    BackendType.Xai,
+    "Grok 4.7",
+    500_000,
+    "xAI frontier model for coding, agentic tasks, and knowledge work"), IVisionModel, IReasoningModel
+{
+    public string? MMProjectName => null;
+    public Func<string, ThinkingState, LLMTokenValue>? ReasonFunction => null;
+    public string? AdditionalPrompt => null;
+}
+
+public sealed record Grok4_6() : CloudModel(
+    Models.Xai.Grok4_6,
+    BackendType.Xai,
+    "Grok 4.6",
+    500_000,
+    "xAI model for coding, agentic tasks, and knowledge work"), IVisionModel, IReasoningModel
+{
+    public string? MMProjectName => null;
+    public Func<string, ThinkingState, LLMTokenValue>? ReasonFunction => null;
+    public string? AdditionalPrompt => null;
+}
+
+public sealed record Grok4_5() : CloudModel(
+    Models.Xai.Grok4_5,
+    BackendType.Xai,
+    "Grok 4.5",
+    500_000,
+    "xAI coding model for agentic software engineering and workflow tasks"), IVisionModel, IReasoningModel
+{
+    public string? MMProjectName => null;
+    public Func<string, ThinkingState, LLMTokenValue>? ReasonFunction => null;
+    public string? AdditionalPrompt => null;
+}
+
+public sealed record Grok4_3() : CloudModel(
+    Models.Xai.Grok4_3,
+    BackendType.Xai,
+    "Grok 4.3",
+    1_000_000,
+    "Fast, reliable xAI model with strong tool calling and instruction following"), IVisionModel, IReasoningModel
+{
+    public string? MMProjectName => null;
+    public Func<string, ThinkingState, LLMTokenValue>? ReasonFunction => null;
+    public string? AdditionalPrompt => null;
+}
+
+public sealed record GrokBuild0_1() : CloudModel(
+    Models.Xai.GrokBuild0_1,
+    BackendType.Xai,
+    "Grok Build 0.1",
+    256_000,
+    "xAI coding model for agentic software engineering and workflow tasks"), IVisionModel, IReasoningModel
+{
+    public string? MMProjectName => null;
+    public Func<string, ThinkingState, LLMTokenValue>? ReasonFunction => null;
+    public string? AdditionalPrompt => null;
+}
+
+public sealed record GrokImagineImageQuality() : CloudModel(
+    Models.Xai.GrokImagineImageQuality,
+    BackendType.Xai,
+    "Grok Imagine Image Quality",
+    4000,
+    "xAI high-quality image generation model"), IImageGenerationModel;
+
+public sealed record GrokImagineImage2_0() : CloudModel(
+    Models.Xai.GrokImagineImage2_0,
+    BackendType.Xai,
+    "Grok Imagine Image 2.0",
+    4000,
+    "xAI latest image generation model"), IImageGenerationModel;
 
 public sealed record Grok4_20Reasoning() : CloudModel(
     Models.Xai.Grok4_20Reasoning,
@@ -599,6 +906,29 @@ public sealed record GptOss120b() : CloudModel(
     130_000,
     "Open-source 120B parameter GPT model running on Groq infrastructure");
 
+public sealed record MiniMaxM2_7() : CloudModel(
+    Models.Groq.MiniMaxM2_7,
+    BackendType.GroqCloud,
+    "MiniMax M2.7 (Groq)",
+    196_608,
+    "MiniMax's MoE model for agentic workflows and software engineering on Groq (preview, Enterprise only)"), IReasoningModel
+{
+    public Func<string, ThinkingState, LLMTokenValue>? ReasonFunction => null;
+    public string? AdditionalPrompt => null;
+}
+
+public sealed record Qwen3_8_27b() : CloudModel(
+    Models.Groq.Qwen3_8_27b,
+    BackendType.GroqCloud,
+    "Qwen 3.8 27B (Groq)",
+    131_072,
+    "Alibaba's multimodal Qwen 3.8 27B with thinking and instruct modes running on Groq (preview)"), IVisionModel, IReasoningModel
+{
+    public string? MMProjectName => null;
+    public Func<string, ThinkingState, LLMTokenValue>? ReasonFunction => null;
+    public string? AdditionalPrompt => null;
+}
+
 // ===== DeepSeek Models =====
 
 public sealed record DeepSeekReasoner() : CloudModel(
@@ -618,6 +948,29 @@ public sealed record DeepSeekChat() : CloudModel(
     "DeepSeek Chat",
     128_000,
     "DeepSeek model for complex problem solving");
+
+public sealed record DeepSeekFlash() : CloudModel(
+    Models.DeepSeek.Flash,
+    BackendType.DeepSeek,
+    "DeepSeek Flash",
+    1_000_000,
+    "DeepSeek V4.1 Flash, a fast multimodal model with optional thinking mode"), IVisionModel, IReasoningModel
+{
+    public string? MMProjectName => null;
+    public Func<string, ThinkingState, LLMTokenValue>? ReasonFunction => null;
+    public string? AdditionalPrompt => null;
+}
+
+public sealed record DeepSeekV4Pro() : CloudModel(
+    Models.DeepSeek.V4Pro,
+    BackendType.DeepSeek,
+    "DeepSeek V4 Pro",
+    1_000_000,
+    "DeepSeek's most capable V4 model for complex reasoning and agentic tasks"), IReasoningModel
+{
+    public Func<string, ThinkingState, LLMTokenValue>? ReasonFunction => null;
+    public string? AdditionalPrompt => null;
+}
 
 // ===== Ollama Models =====
 
